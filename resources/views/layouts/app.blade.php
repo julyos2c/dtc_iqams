@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+
+    <title>{{ config('app.name', 'IQAMS') }}</title>
+    <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.bunny.net">
+    <link href="https://fonts.bunny.net/css?family=poppins:300,400,500,600,700" rel="stylesheet" />
+
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+</head>
+<body data-admin-shell class="h-screen overflow-hidden font-sans antialiased bg-gray-50"
+      x-data="{
+          sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true',
+          mobileOpen: false
+      }"
+      x-init="$watch('sidebarCollapsed', value => localStorage.setItem('sidebarCollapsed', value))"
+      @keydown.escape.window="mobileOpen = false"
+>
+    <x-toast-notifications />
+    <div class="h-screen overflow-hidden">
+
+        <x-sidebar />
+
+        {{-- Mobile top bar: only visible below lg, gives access to the drawer toggle --}}
+        <div class="h-16 lg:hidden flex items-center justify-between bg-white border-b border-gray-200 px-4">
+            <span class="font-semibold text-gray-800">{{ config('app.name', 'IQAMS') }}</span>
+            <div class="ml-auto mr-2"><x-leave-notification-bell /></div>
+            <button
+                @click="mobileOpen = true"
+                type="button"
+                class="p-2 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                aria-label="Open navigation menu"
+            >
+                <x-heroicon-o-bars-3 class="w-6 h-6" aria-hidden="true" />
+            </button>
+        </div>
+
+        {{-- Main content: left margin reacts to sidebar width on desktop, no margin on mobile --}}
+        <div
+            id="app-content"
+            class="flex h-[calc(100vh-4rem)] min-h-0 flex-col transition-[margin-left] duration-200 ease-in-out lg:h-screen"
+            :class="sidebarCollapsed ? 'lg:ml-[80px]' : 'lg:ml-[260px]'"
+        >
+            @isset($header)
+                <header class="iqams-shell-header relative z-30 flex h-20 shrink-0 items-center border-b border-gray-200 bg-white">
+                    <div class="flex h-full w-full items-center gap-4 px-4 sm:px-6 lg:px-8">
+                        <div class="min-w-0 flex-1">{{ $header }}</div>
+                        <x-leave-notification-bell class="hidden lg:block" />
+                    </div>
+                </header>
+            @endisset
+
+            <main class="app-main-scroll min-h-0 flex-1 overflow-y-auto">
+                {{ $slot }}
+            </main>
+        </div>
+    </div>
+    <x-password-confirmation-modal />
+    <x-password-reset-confirmation-modal />
+    <x-logout-confirmation />
+    @stack('scripts')
+</body>
+</html>

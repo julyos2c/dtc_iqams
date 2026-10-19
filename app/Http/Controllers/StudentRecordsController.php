@@ -1,0 +1,35 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\AttendanceLog;
+use App\Services\StudentAbsenceWarningService;
+use App\Services\StudentAttendanceSummary;
+use Illuminate\Http\Request;
+use Illuminate\View\View;
+
+class StudentRecordsController extends Controller
+{
+    public function attendance(
+        Request $request,
+        StudentAbsenceWarningService $absenceWarnings,
+        StudentAttendanceSummary $attendanceSummary,
+    ): View
+    {
+        $student = $request->user()->student ?? abort(403, 'No student profile linked to this account.');
+        $logs = AttendanceLog::canonical()->where('user_id', $request->user()->id)
+            ->with(['schedule.subject', 'schoolEvent'])->latest('scan_time')->paginate(15);
+
+        $subjectAbsenceWarnings = $absenceWarnings->forStudent($student);
+        $summary = $attendanceSummary->forStudent($student);
+
+        return view('student.attendance', compact('student', 'logs', 'summary', 'subjectAbsenceWarnings'));
+    }
+
+    public function qr(Request $request): View
+    {
+        $student = $request->user()->student ?? abort(403, 'No student profile linked to this account.');
+
+        return view('student.qr', compact('student'));
+    }
+}

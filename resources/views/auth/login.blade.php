@@ -1,0 +1,73 @@
+<x-guest-layout>
+    <div class="rounded-[22px] border border-slate-200 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)] sm:p-8">
+    <div class="mb-8">
+        <p class="text-sm font-bold tracking-[0.12em] text-teal-700">WELCOME BACK</p>
+        <h2 class="mt-2 text-3xl font-bold tracking-tight text-slate-900">Sign in to your account</h2>
+        <p class="mt-2 text-sm leading-6 text-slate-500">Enter your credentials to access your attendance dashboard.</p>
+    </div>
+
+    <x-auth-session-status
+        class="mb-5 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
+        :status="session('status')" />
+
+    <form method="POST" action="{{ route('login') }}" data-login-form>
+        @csrf
+
+        <div class="space-y-5">
+        <div>
+            <x-input-label for="user_id" :value="__('User ID')" class="mb-2 text-sm font-semibold text-slate-700" />
+            <div class="relative">
+                <svg class="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                    <path stroke-linecap="round" d="M8 9h8M8 13h5M8 17h4" />
+                </svg>
+                <x-text-input id="user_id"
+                    class="block w-full rounded-xl border-slate-200 py-3 pl-11 pr-4 text-sm shadow-sm placeholder:text-slate-400 focus:border-slate-400 focus:ring-slate-300"
+                    type="text" name="user_id" :value="old('user_id')" required autofocus autocomplete="username"
+                    placeholder="Enter your student or employee ID" />
+            </div>
+            <x-input-error :messages="$errors->get('user_id')" class="mt-2" />
+        </div>
+
+        <div>
+            <div class="mb-2 flex items-center justify-between">
+                <x-input-label for="password" :value="__('Password')" class="text-sm font-semibold text-slate-700" />
+            </div>
+            <div class="relative">
+                <x-heroicon-o-lock-closed
+                    class="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                <x-text-input id="password"
+                    class="block w-full rounded-xl border-slate-200 py-3 pl-11 pr-4 text-sm shadow-sm placeholder:text-slate-400 focus:border-slate-400 focus:ring-slate-300"
+                    type="password" name="password" required autocomplete="current-password"
+                    placeholder="Enter your password" />
+            </div>
+            <x-input-error :messages="$errors->get('password')" class="mt-2" />
+        </div>
+
+        <div class="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-2 sm:flex-nowrap sm:items-center">
+            <label for="remember_me" class="flex min-w-0 cursor-pointer items-center gap-2.5 text-sm text-slate-600">
+                <input id="remember_me" type="checkbox"
+                    class="shrink-0 rounded border-slate-300 text-teal-600 shadow-sm focus:ring-teal-500" name="remember">
+                <span>Remember me for 30 days</span>
+            </label>
+
+            @if (Route::has('password.request'))
+                <a class="ml-auto mt-0.5 shrink-0 rounded text-sm font-semibold text-teal-700 transition hover:text-teal-900 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 sm:ml-0 sm:mt-0"
+                    href="{{ route('password.request') }}">Forgot password?</a>
+            @endif
+        </div>
+
+        <button type="submit" data-login-submit
+            class="login-submit-button flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-slate-900/20 transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-700 focus:ring-offset-2">
+            <svg data-login-arrow aria-hidden="true" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="m22 2-7 20-4-9-9-4 20-7Z" stroke-linejoin="round" />
+                <path d="M22 2 11 13" stroke-linecap="round" />
+            </svg>
+            <span data-login-label>Login</span>
+            <span class="login-submit-spinner" data-login-spinner aria-hidden="true"></span>
+        </button>
+        </div>
+    </form>
+    </div>
+</x-guest-layout>
