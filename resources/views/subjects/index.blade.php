@@ -96,7 +96,7 @@
 
                     <div class="mb-6">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Units</label>
-                        <input type="number" step="0.5" min="0" max="10" name="units"
+                        <input type="number" step="1" min="0" max="10" name="units"
                             value="{{ old('units') }}"
                             class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                             placeholder="e.g. 3">
@@ -149,7 +149,7 @@
 
                     <div class="mb-6">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Units</label>
-                        <input type="number" step="0.5" min="0" max="10" name="units"
+                        <input type="number" step="1" min="0" max="10" name="units"
                             x-model="editModal.units"
                             class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                     </div>

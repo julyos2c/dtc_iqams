@@ -34,22 +34,17 @@
             <div class="mb-2 flex items-center justify-between">
                 <x-input-label for="password" :value="__('Password')" class="text-sm font-semibold text-slate-700" />
             </div>
-            <div class="relative">
-                <x-heroicon-o-lock-closed
-                    class="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                <x-text-input id="password"
-                    class="block w-full rounded-xl border-slate-200 py-3 pl-11 pr-4 text-sm shadow-sm placeholder:text-slate-400 focus:border-slate-400 focus:ring-slate-300"
-                    type="password" name="password" required autocomplete="current-password"
-                    placeholder="Enter your password" />
-            </div>
-            <x-input-error :messages="$errors->get('password')" class="mt-2" />
+            <x-password-input id="password" name="password" label="" :error-messages="$errors->get('password')"
+                leading-icon="heroicon-o-lock-closed" autocomplete="current-password" required
+                placeholder="Enter your password"
+                class="rounded-xl border-slate-200 py-3 text-sm shadow-sm placeholder:text-slate-400 focus:border-slate-400 focus:ring-slate-300" />
         </div>
 
         <div class="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-2 sm:flex-nowrap sm:items-center">
             <label for="remember_me" class="flex min-w-0 cursor-pointer items-center gap-2.5 text-sm text-slate-600">
                 <input id="remember_me" type="checkbox"
                     class="shrink-0 rounded border-slate-300 text-teal-600 shadow-sm focus:ring-teal-500" name="remember">
-                <span>Remember me for 30 days</span>
+                <span>Remember me</span>
             </label>
 
             @if (Route::has('password.request'))

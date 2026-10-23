@@ -27,7 +27,10 @@ class Subject extends Model
 
     protected function casts(): array
     {
-        return ['archived_at' => 'datetime'];
+        return [
+            'archived_at' => 'datetime',
+            'units' => 'integer',
+        ];
     }
 
     public function scopeActive($query)

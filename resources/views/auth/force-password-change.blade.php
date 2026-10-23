@@ -1,4 +1,5 @@
 <x-guest-layout>
+    <div class="rounded-[22px] border border-slate-200 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)] sm:p-8">
     <div class="mb-6">
         <h1 class="text-2xl font-bold text-slate-900">Change your password</h1>
         <p class="mt-2 text-sm leading-6 text-slate-500">A new password is required before you can continue to IQAMS.</p>
@@ -11,24 +12,27 @@
         @method('PUT')
 
         <div>
-            <x-input-label for="current_password" value="Current password" />
-            <x-text-input id="current_password" name="current_password" type="password" class="mt-1 block w-full"
-                autocomplete="current-password" required autofocus />
-            <x-input-error class="mt-2" :messages="$errors->forcePasswordChange->get('current_password')" />
+            <x-password-input id="current_password" name="current_password" label="Current password"
+                :error-messages="$errors->forcePasswordChange->get('current_password')"
+                autocomplete="current-password" required autofocus
+                placeholder="Enter your current password"
+                class="rounded-xl border-slate-200 py-3 text-sm shadow-sm placeholder:text-slate-400 focus:border-slate-400 focus:ring-slate-300" />
         </div>
 
         <div>
-            <x-input-label for="password" value="New password" />
-            <x-text-input id="password" name="password" type="password" class="mt-1 block w-full"
-                autocomplete="new-password" required />
-            <x-input-error class="mt-2" :messages="$errors->forcePasswordChange->get('password')" />
+            <x-password-input id="password" name="password" label="New password"
+                :error-messages="$errors->forcePasswordChange->get('password')"
+                autocomplete="new-password" required
+                placeholder="Enter your new password"
+                class="rounded-xl border-slate-200 py-3 text-sm shadow-sm placeholder:text-slate-400 focus:border-slate-400 focus:ring-slate-300" />
         </div>
 
         <div>
-            <x-input-label for="password_confirmation" value="Confirm new password" />
-            <x-text-input id="password_confirmation" name="password_confirmation" type="password"
-                class="mt-1 block w-full" autocomplete="new-password" required />
-            <x-input-error class="mt-2" :messages="$errors->forcePasswordChange->get('password_confirmation')" />
+            <x-password-input id="password_confirmation" name="password_confirmation" label="Confirm new password"
+                :error-messages="$errors->forcePasswordChange->get('password_confirmation')"
+                autocomplete="new-password" required 
+                placeholder="Confirm your new password"
+                class="rounded-xl border-slate-200 py-3 text-sm shadow-sm placeholder:text-slate-400 focus:border-slate-400 focus:ring-slate-300" />
         </div>
 
         <div class="flex items-center justify-between gap-4">
@@ -42,4 +46,5 @@
         @csrf
         <button type="submit" class="text-sm text-slate-500 underline hover:text-slate-700">Logout</button>
     </form>
+    </div>
 </x-guest-layout>

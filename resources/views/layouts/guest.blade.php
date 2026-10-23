@@ -53,7 +53,7 @@
                     <span class="text-lg font-bold tracking-tight">IQAMS</span>
                 </a>
                 {{ $slot }}
-                <p class="mt-8 text-center text-xs leading-5 text-slate-300">&copy; 2026 IQAMS &middot; Integrated QR-Code Attendance Monitoring System</p>
+                <p class="mt-8 text-center text-xs leading-5 text-slate-300">DTC &middot; Integrated QR-Code Attendance Monitoring System</p>
             </div>
         </section>
     </main>

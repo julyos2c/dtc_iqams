@@ -77,6 +77,21 @@ class Phase2IdentityAuthorizationTest extends TestCase
         $this->assertTrue(Hash::check('A-new-password-123', $user->password));
     }
 
+    public function test_forced_password_change_screen_has_an_independent_toggle_for_each_password_field(): void
+    {
+        $user = $this->user('student');
+        $user->forceFill(['must_change_password' => true])->saveQuietly();
+
+        $this->actingAs($user)->get(route('password.force-change'))
+            ->assertOk()
+            ->assertSee('id="current_password"', false)
+            ->assertSee('id="password"', false)
+            ->assertSee('id="password_confirmation"', false)
+            ->assertSee('aria-controls="current_password"', false)
+            ->assertSee('aria-controls="password"', false)
+            ->assertSee('aria-controls="password_confirmation"', false);
+    }
+
     public function test_flagged_accounts_are_sent_to_password_change_immediately_after_login(): void
     {
         $user = $this->user('instructor');
