@@ -2,11 +2,14 @@
 
 import Alpine from 'alpinejs';
 import { installNavigationFeedback } from './navigation';
+import { installPasswordVisibilityToggles } from './password-toggle';
 import { createPollingTask } from './polling';
 
 window.createIqamsPollingTask = createPollingTask;
 
 window.Alpine = Alpine;
+
+installPasswordVisibilityToggles();
 
 let qrCodeModulePromise = null;
 
