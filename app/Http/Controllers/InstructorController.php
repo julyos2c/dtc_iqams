@@ -10,6 +10,7 @@ use App\Services\AuditLogger;
 use App\Services\QrCredentialService;
 use App\Services\RoleAssignmentService;
 use App\Services\ProfileImageService;
+use App\Support\UserManagementSearch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -20,19 +21,23 @@ class InstructorController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $instructors = Instructor::query()
+        $search = trim((string) $request->query('search', ''));
+        $query = Instructor::query();
+        UserManagementSearch::apply($query, $search, 'employee_no');
+
+        $instructors = (clone $query)
             ->select(['id', 'user_id', 'department_id', 'employee_no', 'name_prefix', 'first_name', 'middle_name', 'last_name', 'professional_credentials', 'created_at'])
             ->with([
                 'user:id,username,name,email,avatar_path,status,must_change_password',
                 'department:id,department_code,department_name',
             ])
-            ->latest('instructors.created_at')->paginate(10);
+            ->latest('instructors.created_at')->paginate(10)->withQueryString();
 
         $departments = Department::active()->orderBy('department_name')->get(['id', 'department_code', 'department_name']);
 
-        $instructorUserIds = Instructor::query()->pluck('user_id')->values();
+        $instructorUserIds = (clone $query)->pluck('user_id')->values();
         return view('instructors.index', compact('instructors', 'departments', 'instructorUserIds'));
     }
 
@@ -58,10 +63,12 @@ class InstructorController extends Controller
             'last_name' => 'required|string|max:255',
             'professional_credentials' => 'nullable|string|max:255',
             'email' => 'required|email|unique:users,email',
-            'avatar' => 'required|image|mimes:jpg,jpeg,png|max:2048',
+            'avatar' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
         ]);
 
-        $avatarPath = app(ProfileImageService::class)->store($request->file('avatar'));
+        $avatarPath = $request->hasFile('avatar')
+            ? app(ProfileImageService::class)->store($request->file('avatar'))
+            : null;
 
         $administrator = $request->user();
 

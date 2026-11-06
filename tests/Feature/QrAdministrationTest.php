@@ -122,6 +122,39 @@ class QrAdministrationTest extends TestCase
             ->assertSee('<td>—</td>', false);
     }
 
+    public function test_revoke_and_reissue_preserve_identity_and_reject_old_codes(): void
+    {
+        $admin = $this->user('admin');
+        $student = $this->student();
+        $service = app(\App\Services\QrCredentialService::class);
+        $old = $service->plainText($service->issue($student->user, $admin));
+        $this->actingAs($admin)->getJson(route('admin.qr.show', $student->user))
+            ->assertOk()->assertJsonPath('version', 1)->assertJsonPath('total_reissuances', 0)
+            ->assertJsonCount(0, 'revocation_history')->assertJsonMissingPath('qr_code');
+        $this->actingAs($admin)->postJson(route('admin.qr.revoke', $student->user), ['reason' => 'Lost ID'])->assertOk();
+        $this->assertDatabaseHas('qr_credentials', ['user_id' => $student->user_id, 'status' => 'revoked', 'revocation_reason' => 'Lost ID']);
+        $this->actingAs($admin)->getJson(route('admin.id-card.show', $student->user))->assertUnprocessable();
+        try {
+            app(\App\Services\QrIdentityResolver::class)->resolve($old);
+            $this->fail('Revoked QR was accepted');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->assertStringContainsString('revoked or replaced', $e->getMessage());
+        }
+        $this->actingAs($admin)->postJson(route('admin.qr.reissue', $student->user))->assertOk();
+        $this->actingAs($admin)->getJson(route('admin.qr.show', $student->user))
+            ->assertOk()->assertJsonPath('version', 2)->assertJsonPath('total_reissuances', 1)
+            ->assertJsonCount(1, 'revocation_history')->assertJsonPath('revocation_history.0.reason', 'Lost ID')
+            ->assertJsonPath('revocation_history.0.administrator', $admin->name)->assertJsonMissingPath('qr_code');
+        $new = $service->plainText($service->activeFor($student->user));
+        $this->assertNotSame($old, $new);
+        $this->assertSame($student->user_id, app(\App\Services\QrIdentityResolver::class)->resolve($new)->id);
+        $this->assertSame(1, $student->user->qrCredentials()->where('status', 'active')->count());
+        $this->assertDatabaseHas('audit_logs', ['action' => 'qr.revoked', 'actor_id' => $admin->id, 'subject_id' => $student->user_id]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'qr.regenerated', 'actor_id' => $admin->id, 'subject_id' => $student->user_id]);
+        $this->actingAs($this->user('student'))->postJson(route('admin.qr.reissue', $student->user))->assertForbidden();
+        $this->actingAs($this->user('student'))->postJson(route('admin.qr.revoke', $student->user), ['reason' => 'Lost ID'])->assertForbidden();
+    }
+
     private function user(string $role): User
     {
         return User::factory()->create(['role_id' => Role::findByName($role, 'web')->id]);

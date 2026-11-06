@@ -10,6 +10,7 @@ use App\Services\AuditLogger;
 use App\Services\QrCredentialService;
 use App\Services\RoleAssignmentService;
 use App\Services\ProfileImageService;
+use App\Support\UserManagementSearch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -20,19 +21,23 @@ class NonTeachingStaffController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $staffMembers = NonTeachingStaff::query()
+        $search = trim((string) $request->query('search', ''));
+        $query = NonTeachingStaff::query();
+        UserManagementSearch::apply($query, $search, 'employee_no');
+
+        $staffMembers = (clone $query)
             ->select(['id', 'user_id', 'office_unit_id', 'employee_no', 'name_prefix', 'first_name', 'middle_name', 'last_name', 'name_suffix', 'created_at'])
             ->with([
                 'user:id,username,name,email,avatar_path,status,must_change_password',
                 'officeUnit:id,code,name',
             ])
-            ->latest('non_teaching_staff.created_at')->paginate(10);
+            ->latest('non_teaching_staff.created_at')->paginate(10)->withQueryString();
 
         $officeUnits = OfficeUnit::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']);
 
-        $staffUserIds = NonTeachingStaff::query()->pluck('user_id')->values();
+        $staffUserIds = (clone $query)->pluck('user_id')->values();
         return view('non-teaching-staff.index', compact('staffMembers', 'officeUnits', 'staffUserIds'));
     }
 
@@ -58,12 +63,14 @@ class NonTeachingStaffController extends Controller
             'last_name' => 'required|string|max:255',
             'name_suffix' => 'nullable|string|max:100',
             'email' => 'required|email|unique:users,email',
-            'avatar' => 'required|image|mimes:jpg,jpeg,png|max:2048',
+            'avatar' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
         ]);
 
         $validated = $this->normalizeOptionalNameParts($validated);
 
-        $avatarPath = app(ProfileImageService::class)->store($request->file('avatar'));
+        $avatarPath = $request->hasFile('avatar')
+            ? app(ProfileImageService::class)->store($request->file('avatar'))
+            : null;
 
         $administrator = $request->user();
 

@@ -35,8 +35,9 @@ class StudentDashboardController extends Controller
             ->get();
 
         $subjectAbsenceWarnings = $absenceWarnings->forStudent($student);
-        $summary = $attendanceSummary->forStudent($student);
-        $attendanceOverview = $attendanceSummary->overviewForStudent($student);
+        $dashboard = $attendanceSummary->dashboardForStudent($student);
+        $summary = $dashboard['summary'];
+        $attendanceOverview = $dashboard['overview'];
         $stats = collect(['present', 'late', 'absent', 'excused'])
             ->mapWithKeys(fn ($status) => [$status => $summary[$status]])
             ->all();

@@ -143,7 +143,7 @@
                             </div>
                         </div>
                         <div class="mt-4 flex justify-end">
-                            <a :href="downloadUrl" x-show="downloadUrl"
+                            <a :href="downloadUrl" x-show="downloadUrl" download
                                 class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700">
                                 <x-heroicon-o-arrow-down-tray class="h-5 w-5" />
                                 Download Excel Report

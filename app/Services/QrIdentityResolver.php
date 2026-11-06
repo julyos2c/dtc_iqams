@@ -22,7 +22,7 @@ class QrIdentityResolver
 
         if ($credential) {
             if ($credential->status !== 'active') {
-                throw ValidationException::withMessages(['qr_code' => 'This QR credential has been revoked.']);
+                throw ValidationException::withMessages(['qr_code' => 'QR Code Invalid. This QR code has been revoked or replaced. Please contact the administrator.']);
             }
 
             if (! $credential->user) {

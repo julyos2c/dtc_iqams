@@ -103,11 +103,11 @@
                     <div class="mb-4">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Course</label>
                         <select name="course_id"
-                            class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            class="w-full min-w-0 truncate rounded-md border-gray-300 pr-10 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                             <option value="">-- Select Course --</option>
                             @foreach ($courses as $course)
                                 <option value="{{ $course->id }}" @selected(old('course_id') == $course->id)>
-                                    {{ $course->course_code }} - {{ $course->course_name }}
+                                    {{ $course->course_code }}
                                 </option>
                             @endforeach
                         </select>
@@ -183,11 +183,10 @@
                     <div class="mb-4">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Course</label>
                         <select name="course_id" x-model="editModal.course_id"
-                            class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            class="w-full min-w-0 truncate rounded-md border-gray-300 pr-10 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                             <option value="">-- Select Course --</option>
                             @foreach ($courses as $course)
-                                <option value="{{ $course->id }}">{{ $course->course_code }} -
-                                    {{ $course->course_name }}</option>
+                                <option value="{{ $course->id }}">{{ $course->course_code }}</option>
                             @endforeach
                         </select>
                     </div>

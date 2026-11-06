@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class QrCredential extends Model
 {
-    protected $fillable = ['user_id', 'code_hash', 'encrypted_code', 'status', 'issued_by', 'revoked_by', 'issued_at', 'revoked_at'];
+    protected $fillable = ['user_id', 'code_hash', 'encrypted_code', 'status', 'issued_by', 'revoked_by', 'issued_at', 'revoked_at', 'revocation_reason'];
 
     protected function casts(): array
     {

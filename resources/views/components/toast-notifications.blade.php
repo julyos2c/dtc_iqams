@@ -38,7 +38,7 @@
     x-data="toastNotifications(@js($notifications))"
     data-toast-notifications="{{ json_encode($notifications) }}"
     @toast.window="add($event.detail)"
-    class="pointer-events-none fixed right-3 top-3 z-[100] flex w-[calc(100%-1.5rem)] max-w-sm flex-col gap-3 sm:right-5 sm:top-5"
+    class="pointer-events-none fixed right-3 top-3 z-[150] flex w-[calc(100%-1.5rem)] max-w-sm flex-col gap-3 sm:right-5 sm:top-5"
     role="region"
     aria-label="Notifications"
 >

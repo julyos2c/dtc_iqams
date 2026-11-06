@@ -10,7 +10,6 @@
 
     <div class="py-8" x-data="{
         showCreateModal: {{ $errors->any() ? 'true' : 'false' }},
-        filterUserId: @js((string) request('user_id', '')),
         createUserId: @js((string) old('user_id', '')),
         createScheduleId: @js((string) old('schedule_id', '')),
         editModal: { show: false, id: null, user_id: '', schedule_id: '', attendance_type: '', scan_time: '', status_override: '', scanner_location: '', remarks: '' },
@@ -19,12 +18,16 @@
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
 
             {{-- Filters --}}
-            <form method="GET" action="{{ route('attendance-logs.index') }}"
+            <form method="GET" action="{{ route('attendance-logs.index') }}" x-data="attendanceLogSearch" @submit.prevent="submit()"
                 class="mb-4 grid grid-cols-1 items-start gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm md:grid-cols-2 lg:grid-cols-[minmax(0,1.8fr)_minmax(140px,.55fr)_minmax(180px,.75fr)]">
-                <div class="min-w-0 lg:row-span-2">
-                    <label class="mb-1.5 block text-xs font-semibold text-gray-600">Person</label>
-                    <x-admin-lookup-field :endpoint="route('admin.lookups.people')" name="user_id" model="filterUserId" :selected="request('user_id')"
-                        placeholder="Search people..." empty-label="All" />
+                <div class="min-w-0">
+                    <label for="attendance-person-search" class="mb-1.5 block text-xs font-semibold text-gray-600">Person</label>
+                    <div class="relative">
+                        <input id="attendance-person-search" type="text" name="search" value="{{ request('search') }}" placeholder="Search people..." autocomplete="off" x-model="query" @input="schedule()"
+                            class="h-10 w-full rounded-lg border-gray-300 pr-10 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <button type="button" x-cloak x-show="query.length" @click="query = ''; submit(); $el.previousElementSibling.focus()" aria-label="Clear person search" class="absolute right-2 top-2 rounded p-1 text-gray-400 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"><x-heroicon-o-x-mark class="h-4 w-4" aria-hidden="true" /></button>
+                    </div>
+                    <p x-cloak x-show="error" x-text="error" role="alert" class="mt-1 text-xs text-red-700"></p>
                 </div>
 
                 <div class="min-w-0">
@@ -47,10 +50,10 @@
 
                 <div class="flex items-center gap-3 md:col-span-2 lg:col-start-1">
                     <button type="submit"
-                        class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
+                        class="h-10 rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white hover:bg-indigo-700">
                         Apply filters
                     </button>
-                    <a href="{{ route('attendance-logs.index') }}" class="rounded-lg px-2 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700">
+                    <a href="{{ route('attendance-logs.index') }}" @click.prevent="clear()" class="rounded-lg px-2 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700">
                         Clear
                     </a>
                 </div>
@@ -59,16 +62,16 @@
             <div data-repeatable-list class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                 <div class="flex items-center justify-between border-b border-gray-200 px-5 py-3.5 sm:px-6">
                     <div class="flex items-baseline gap-2">
-                        <span class="text-sm font-semibold text-gray-800">{{ $logs->total() }}</span>
+                        <span data-attendance-count class="text-sm font-semibold text-gray-800">{{ $logs->total() }}</span>
                         <span class="text-sm text-gray-500">attendance records</span>
                     </div>
                     <button @click="showCreateModal = true"
-                        class="rounded-lg bg-indigo-600 px-3.5 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700">
+                        class="h-10 rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white hover:bg-indigo-700">
                         + Add Log
                     </button>
                 </div>
 
-                <div class="overflow-x-auto">
+                <div class="overflow-x-auto" data-attendance-table>
                 <table class="min-w-[900px] w-full text-left text-sm">
                     <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
                         <tr>
@@ -138,7 +141,7 @@
                 </table>
                 </div>
 
-                <div class="px-6 py-4 border-t border-gray-200">
+                <div class="px-6 py-4 border-t border-gray-200" data-attendance-pagination>
                     {{ $logs->links() }}
                 </div>
             </div>
@@ -162,8 +165,23 @@
 
                     <div class="mb-4">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Person</label>
-                        <x-admin-lookup-field :endpoint="route('admin.lookups.people')" name="user_id" model="createUserId" :selected="old('user_id')"
-                            placeholder="Search people..." empty-label="-- Select Person --" />
+                        <div x-data="attendanceLookupSearch({ endpoint: @js(route('admin.lookups.people')), selected: @js(old('user_id')) })"
+                            @repeatable-form-reset.window="reset()" @click.outside="open = false" class="relative">
+                            <input type="hidden" name="user_id" x-model="createUserId">
+                            <input type="text" x-model="search" @input="change()" @focus="if (!createUserId) { open = true; load() }" @keydown.escape="open = false"
+                                placeholder="Search people..." autocomplete="off" aria-label="Search people"
+                                :aria-expanded="open.toString()" aria-controls="attendance-person-results"
+                                class="w-full rounded-md border-gray-300 pr-10 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            <button type="button" x-cloak x-show="search.length" @click="search = ''; change(); $el.previousElementSibling.focus()" aria-label="Clear person search" class="absolute right-2 top-2 rounded p-1 text-gray-400 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"><x-heroicon-o-x-mark class="h-4 w-4" aria-hidden="true" /></button>
+                            <div id="attendance-person-results" x-cloak x-show="open" class="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+                                <p x-show="loading" class="px-3 py-2 text-sm text-gray-500">Searching...</p>
+                                <p x-show="error" x-text="error" role="alert" class="px-3 py-2 text-sm text-red-700"></p>
+                                <p x-show="!loading && !error && searched && options.length === 0" class="px-3 py-2 text-sm text-gray-500">No people found.</p>
+                                <template x-for="option in options" :key="option.id">
+                                    <button type="button" @click="select(option)" class="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-indigo-50 focus:bg-indigo-50" x-text="option.label"></button>
+                                </template>
+                            </div>
+                        </div>
                         @error('user_id')
                             <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                         @enderror
@@ -171,8 +189,23 @@
 
                     <div class="mb-4">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Schedule</label>
-                        <x-admin-lookup-field :endpoint="route('admin.lookups.schedules')" name="schedule_id" model="createScheduleId"
-                            :selected="old('schedule_id')" placeholder="Search schedules..." empty-label="-- Select Schedule --" />
+                        <div x-data="attendanceLookupSearch({ endpoint: @js(route('admin.lookups.schedules')), selected: @js(old('schedule_id')), model: 'createScheduleId', label: 'schedules' })"
+                            @repeatable-form-reset.window="reset()" @click.outside="open = false" class="relative">
+                            <input type="hidden" name="schedule_id" x-model="createScheduleId">
+                            <input type="text" x-model="search" @input="change()" @focus="if (!createScheduleId) { open = true; load() }" @keydown.escape="open = false"
+                                placeholder="Search schedules..." autocomplete="off" aria-label="Search schedules"
+                                :aria-expanded="open.toString()" aria-controls="attendance-schedule-results"
+                                class="w-full rounded-md border-gray-300 pr-10 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            <button type="button" x-cloak x-show="search.length" @click="search = ''; change(); $el.previousElementSibling.focus()" aria-label="Clear schedule search" class="absolute right-2 top-2 rounded p-1 text-gray-400 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"><x-heroicon-o-x-mark class="h-4 w-4" aria-hidden="true" /></button>
+                            <div id="attendance-schedule-results" x-cloak x-show="open" class="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+                                <p x-show="loading" class="px-3 py-2 text-sm text-gray-500">Searching...</p>
+                                <p x-show="error" x-text="error" role="alert" class="px-3 py-2 text-sm text-red-700"></p>
+                                <p x-show="!loading && !error && searched && options.length === 0" class="px-3 py-2 text-sm text-gray-500">No schedules found.</p>
+                                <template x-for="option in options" :key="option.id">
+                                    <button type="button" @click="select(option)" class="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-indigo-50 focus:bg-indigo-50" x-text="option.label"></button>
+                                </template>
+                            </div>
+                        </div>
                         @error('schedule_id')
                             <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                         @enderror

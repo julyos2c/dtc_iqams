@@ -26,6 +26,25 @@ class DailyPersonnelAttendanceReportTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_unfiltered_report_reuses_rows_for_identical_filter_options(): void
+    {
+        $this->instructor('Zara', 'Zulu');
+        $this->staff('Ana', 'Alpha');
+        $service = app(PersonnelAttendanceReportService::class);
+        $report = $service->getDailyReport(today());
+        $expected = $service->filterOptions()['personnel'];
+        DB::enableQueryLog();
+        DB::flushQueryLog();
+        $actual = $service->filterOptions($report['rows'])['personnel'];
+        $reuseQueries = count(DB::getQueryLog());
+        DB::flushQueryLog();
+        $service->filterOptions();
+        $separateQueries = count(DB::getQueryLog());
+        DB::disableQueryLog();
+        $this->assertEquals($expected, $actual);
+        $this->assertLessThan($separateQueries, $reuseQueries);
+    }
+
     private Department $department;
 
     private OfficeUnit $officeUnit;

@@ -1,15 +1,129 @@
 
 
 import Alpine from 'alpinejs';
+import { userManagementSearch } from './user-management-search';
+
+Alpine.data('userManagementSearch', userManagementSearch);
+Alpine.data('attendanceLookupSearch', ({ endpoint, selected, model = 'createUserId', label = 'people' }) => ({
+    lookupValue: '', search: '', options: [], open: false, loading: false, searched: false, error: '', timer: null, controller: null, sequence: 0,
+    init() { if (selected) this.load(selected); },
+    destroy() { clearTimeout(this.timer); this.controller?.abort(); },
+    reset() {
+        clearTimeout(this.timer); this.controller?.abort(); this.sequence++;
+        this.search = ''; this.options = []; this.open = false; this.loading = false; this.searched = false; this.error = '';
+    },
+    change() {
+        this[model] = '';
+        this.open = true;
+        clearTimeout(this.timer); this.controller?.abort(); this.sequence++;
+        this.options = []; this.loading = true; this.error = '';
+        this.timer = setTimeout(() => this.load(), 250);
+    },
+    select(option) {
+        this[model] = String(option.id);
+        this.search = option.label;
+        this.open = false;
+    },
+    async load(selectedId = null) {
+        this.controller?.abort();
+        const controller = new AbortController(); this.controller = controller;
+        const sequence = ++this.sequence;
+        const url = new URL(endpoint, window.location.href);
+        if (this.search.trim()) url.searchParams.set('search', this.search.trim());
+        if (selectedId) url.searchParams.append('selected[]', selectedId);
+        this.loading = true; this.error = '';
+        try {
+            const response = await fetch(url, { signal: controller.signal, credentials: 'same-origin', headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+            if (!response.ok) throw new Error('Lookup failed');
+            const data = await response.json();
+            if (sequence !== this.sequence) return;
+            this.options = data.data || []; this.searched = true;
+            if (selectedId) this.search = this.options.find(option => String(option.id) === String(selectedId))?.label || '';
+        } catch (error) {
+            if (sequence === this.sequence && error.name !== 'AbortError') this.error = `Unable to search ${label}. Please try again.`;
+        } finally {
+            if (sequence === this.sequence) this.loading = false;
+        }
+    },
+}));
+Alpine.data('attendanceLogSearch', () => ({
+    timer: null, controller: null, sequence: 0, error: '', query: '',
+    init() {
+        this.query = this.$el.elements.search.value;
+        this.pagination = event => {
+            const link = event.target.closest('[data-attendance-pagination] a[href]');
+            if (!link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+            event.preventDefault();
+            if (this.timer) this.submit(); else this.load(link.href);
+        };
+        this.history = () => {
+            const params = new URL(window.location.href).searchParams;
+            for (const name of ['search', 'date', 'status']) this.$el.elements[name].value = params.get(name) || '';
+            this.query = this.$el.elements.search.value;
+            this.load(window.location.href, false);
+        };
+        document.addEventListener('click', this.pagination);
+        window.addEventListener('popstate', this.history);
+    },
+    destroy() {
+        clearTimeout(this.timer);
+        this.controller?.abort();
+        document.removeEventListener('click', this.pagination);
+        window.removeEventListener('popstate', this.history);
+    },
+    schedule() {
+        clearTimeout(this.timer);
+        this.controller?.abort();
+        this.sequence++;
+        this.timer = setTimeout(() => this.submit(), 300);
+    },
+    submit() {
+        clearTimeout(this.timer);
+        this.timer = null;
+        const url = new URL(this.$el.action);
+        for (const [key, value] of new FormData(this.$el)) if (value.trim()) url.searchParams.set(key, value);
+        this.load(url.href);
+    },
+    clear() {
+        for (const name of ['search', 'date', 'status']) this.$el.elements[name].value = '';
+        this.query = '';
+        this.submit();
+    },
+    async load(url, updateHistory = true) {
+        clearTimeout(this.timer);
+        this.timer = null;
+        this.controller?.abort();
+        const sequence = ++this.sequence;
+        this.controller = new AbortController();
+        this.error = '';
+        try {
+            const response = await fetch(url, { signal: this.controller.signal, credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'text/html' } });
+            if (!response.ok || response.redirected) throw new Error('Search request failed');
+            const page = new DOMParser().parseFromString(await response.text(), 'text/html');
+            if (sequence !== this.sequence) return;
+            const selectors = ['[data-attendance-count]', '[data-attendance-table]', '[data-attendance-pagination]'];
+            const current = selectors.map(selector => document.querySelector(selector));
+            const next = selectors.map(selector => page.querySelector(selector));
+            if (current.some(element => !element) || next.some(element => !element)) throw new Error('Invalid search response');
+            current.forEach((element, index) => { element.innerHTML = next[index].innerHTML; });
+            if (updateHistory) window.history.replaceState(window.history.state, '', url);
+        } catch (error) {
+            if (sequence === this.sequence && error.name !== 'AbortError') this.error = 'Unable to load results. Please try again.';
+        }
+    },
+}));
 import { installNavigationFeedback } from './navigation';
 import { installPasswordVisibilityToggles } from './password-toggle';
 import { createPollingTask } from './polling';
+import { loadClassAttendance } from './class-attendance';
+import { installReportExports } from './report-export';
 
 window.createIqamsPollingTask = createPollingTask;
 
 window.Alpine = Alpine;
 
 installPasswordVisibilityToggles();
+installReportExports(document, window);
 
 let qrCodeModulePromise = null;
 
@@ -714,6 +828,7 @@ Alpine.data('classAttendanceBrowser', () => ({
     today: '',
     endpoint: '',
     downloadEndpoint: '',
+    attendanceRequest: null,
 
     init() {
         this.today = this.$root.dataset.today;
@@ -781,25 +896,10 @@ Alpine.data('classAttendanceBrowser', () => ({
     },
 
     async selectDate(date) {
-        this.selectedDate = date;
-        this.loading = true;
-        this.error = '';
-        this.attendance = null;
-
-        try {
-            const url = `${this.endpoint.replace('__SCHEDULE__', this.selectedDay.schedule_id)}?date=${encodeURIComponent(date)}`;
-            const response = await fetch(url, { headers: { Accept: 'application/json' } });
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(Object.values(data.errors || {}).flat()[0] || data.message || 'Attendance could not be loaded.');
-            }
-            this.attendance = data;
-        } catch (error) {
-            this.error = error.message || 'Attendance could not be loaded.';
-        } finally {
-            this.loading = false;
-        }
+        await loadClassAttendance(this, date);
     },
+
+    destroy() { this.attendanceRequest?.abort(); },
 
     statusClass(status) {
         return {
@@ -896,7 +996,7 @@ const pageLoader = (() => {
         resetTimer = window.setTimeout(() => {
             stop();
             window.dispatchEvent(new Event('iqams:navigation-cancelled'));
-        }, 15000);
+        }, 3000);
     };
 
     const stop = () => {
@@ -948,12 +1048,6 @@ document.addEventListener('submit', (event) => {
     const form = event.target;
 
     if (!(form instanceof HTMLFormElement) || form.hasAttribute('data-logout-confirmed')) {
-        return;
-    }
-
-    if (form.hasAttribute('data-password-reset-confirmation-required')) {
-        event.preventDefault();
-        window.dispatchEvent(new CustomEvent('password-reset-confirmation-required', { detail: { form } }));
         return;
     }
 
@@ -1146,3 +1240,4 @@ document.addEventListener('submit', (event) => {
 
     setFormSubmitLoading(form);
 });
+

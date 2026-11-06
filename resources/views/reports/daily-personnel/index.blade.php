@@ -22,6 +22,8 @@
         .report-signatures p { display: flex; align-items: end; gap: .4rem; white-space: nowrap; }
         .report-signatures span { display: inline-block; min-width: 10rem; flex: 1; border-bottom: 1px solid #111827; }
         .report-signatures .date-line { min-width: 7rem; }
+        [data-report-filter] .grid > div { min-width: 0; }
+        [data-report-filter] select { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
         @media print {
             @page { size: A4 landscape; margin: 10mm; }
@@ -63,7 +65,9 @@
                     <label for="department_id" class="mb-1 block text-sm font-medium text-gray-700">Department</label>
                     <select id="department_id" name="department_id" class="w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                         <option value="">All Departments</option>
-                        @foreach($departments as $department)<option value="{{ $department->id }}" @selected((string)($filters['department_id'] ?? '') === (string)$department->id)>{{ $department->department_code }} — {{ $department->department_name }}</option>@endforeach
+                        @foreach($departments as $department)
+                            <option value="{{ $department->id }}" title="{{ $department->department_name }}" @selected((string)($filters['department_id'] ?? '') === (string)$department->id)>{{ $department->department_code }}</option>
+                        @endforeach
                     </select>
                     @error('department_id')<p class="mt-1 text-xs text-red-600">{{ $message }}</p>@enderror
                 </div>
@@ -71,7 +75,10 @@
                     <label for="office_unit_id" class="mb-1 block text-sm font-medium text-gray-700">Office/Unit</label>
                     <select id="office_unit_id" name="office_unit_id" class="w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                         <option value="">All Offices/Units</option>
-                        @foreach($officeUnits as $officeUnit)<option value="{{ $officeUnit->id }}" @selected((string)($filters['office_unit_id'] ?? '') === (string)$officeUnit->id)>{{ $officeUnit->code }} — {{ $officeUnit->name }}</option>@endforeach
+                        @foreach($officeUnits as $officeUnit)
+                            @php($officeUnitLabel = $officeUnit->code.' — '.$officeUnit->name)
+                            <option value="{{ $officeUnit->id }}" title="{{ $officeUnitLabel }}" @selected((string)($filters['office_unit_id'] ?? '') === (string)$officeUnit->id)>{{ \Illuminate\Support\Str::limit($officeUnitLabel, 22) }}</option>
+                        @endforeach
                     </select>
                     @error('office_unit_id')<p class="mt-1 text-xs text-red-600">{{ $message }}</p>@enderror
                 </div>
@@ -79,7 +86,10 @@
                     <label for="personnel_id" class="mb-1 block text-sm font-medium text-gray-700">Personnel</label>
                     <select id="personnel_id" name="personnel_id" class="w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                         <option value="">All Personnel</option>
-                        @foreach($personnel as $person)<option value="{{ $person['user_id'] }}" @selected((string)($filters['personnel_id'] ?? '') === (string)$person['user_id'])>{{ $person['name'] }} ({{ $person['personnel_type'] === 'instructor' ? 'Teaching' : 'Non-Teaching' }})</option>@endforeach
+                        @foreach($personnel as $person)
+                            @php($personnelLabel = $person['name'].' ('.($person['personnel_type'] === 'instructor' ? 'Teaching' : 'Non-Teaching').')')
+                            <option value="{{ $person['user_id'] }}" title="{{ $personnelLabel }}" @selected((string)($filters['personnel_id'] ?? '') === (string)$person['user_id'])>{{ \Illuminate\Support\Str::limit($personnelLabel, 22) }}</option>
+                        @endforeach
                     </select>
                     @error('personnel_id')<p class="mt-1 text-xs text-red-600">{{ $message }}</p>@enderror
                 </div>
@@ -90,9 +100,9 @@
                 <a href="{{ route('admin.reports.daily-personnel.index') }}" class="text-sm text-gray-600 hover:text-gray-900">Reset</a>
                 <div class="ml-auto flex flex-wrap gap-2">
                     @foreach(['pdf' => 'Export PDF', 'xlsx' => 'Export Excel'] as $format => $label)
-                        <button type="button" data-report-export-format="{{ $format }}" data-report-export-url="{{ route('admin.reports.daily-personnel.exports.store') }}" class="rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{{ $label }}</button>
+                        <button type="button" data-report-export-format="{{ $format }}" data-report-export-url="{{ route('admin.reports.daily-personnel.exports.store') }}" class="rounded border px-4 py-2 text-sm font-medium {{ $format === 'pdf' ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100' : 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100' }}">{{ $label }}</button>
                     @endforeach
-                    <button type="button" onclick="window.print()" class="rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Print</button>
+                    <button type="button" onclick="window.print()" class="rounded border border-gray-300 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200">Print</button>
                 </div>
             </div>
             <div data-report-export-status class="mt-3 text-sm text-gray-600" aria-live="polite"></div>
@@ -103,56 +113,4 @@
         </div>
     </div>
 
-    <script>
-        document.querySelectorAll('[data-report-export-format]').forEach((button) => {
-            button.addEventListener('click', async () => {
-                const filterForm = document.querySelector('[data-report-filter]');
-                const status = document.querySelector('[data-report-export-status]');
-                const body = new FormData(filterForm);
-                body.set('format', button.dataset.reportExportFormat);
-                button.disabled = true;
-                status.textContent = 'Preparing export…';
-
-                try {
-                    const response = await fetch(button.dataset.reportExportUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Accept': 'application/json',
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                        },
-                        body,
-                    });
-                    const payload = await response.json();
-                    if (!response.ok) throw new Error(payload.message || 'The export could not be queued.');
-                    status.textContent = 'Export queued. This page will provide the download when it is ready.';
-
-                    const poll = async () => {
-                        const result = await fetch(payload.status_url, { headers: { 'Accept': 'application/json' } });
-                        const current = await result.json();
-                        if (current.status === 'completed' && current.download_url) {
-                            const link = document.createElement('a');
-                            link.href = current.download_url;
-                            link.download = '';
-                            link.textContent = 'Download completed export';
-                            link.className = 'ml-2 font-medium text-indigo-600 hover:text-indigo-800';
-                            status.appendChild(link);
-                            button.disabled = false;
-                            return;
-                        }
-                        if (current.status === 'failed' || current.status === 'expired') {
-                            status.textContent = 'The export is no longer available. Please request it again.';
-                            button.disabled = false;
-                            return;
-                        }
-                        window.setTimeout(poll, 2000);
-                    };
-                    window.setTimeout(poll, 1000);
-                } catch (error) {
-                    status.textContent = error.message || 'The export could not be queued.';
-                    button.disabled = false;
-                }
-            });
-        });
-    </script>
 </x-app-layout>

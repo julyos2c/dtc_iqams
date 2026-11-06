@@ -59,34 +59,45 @@
                 </div>
 
                 <div class="overflow-x-auto">
-                <table class="w-full min-w-[850px] table-fixed text-left text-sm">
+                <table class="w-full min-w-[800px] table-fixed text-left text-sm">
+                    <colgroup>
+                        <col class="w-[13%]">
+                        <col class="w-[25%]">
+                        <col class="w-[13%]">
+                        <col class="w-[10%]">
+                        <col class="w-[19%]">
+                        <col class="w-[12%]">
+                        <col class="w-[8%]">
+                    </colgroup>
                     <thead class="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
                         <tr>
-                            <th class="px-5 py-3.5">Subject</th>
-                            <th class="px-5 py-3.5">Instructor</th>
-                            <th class="px-5 py-3.5">Section</th>
-                            <th class="px-5 py-3.5">Day</th>
-                            <th class="px-5 py-3.5">Time</th>
-                            <th class="px-5 py-3.5">Room</th>
-                            <th class="px-5 py-3.5 text-right">Actions</th>
+                            <th scope="col" class="px-3 py-3">Subject</th>
+                            <th scope="col" class="px-3 py-3">Instructor</th>
+                            <th scope="col" class="px-3 py-3">Section</th>
+                            <th scope="col" class="px-3 py-3">Day</th>
+                            <th scope="col" class="px-3 py-3">Time</th>
+                            <th scope="col" class="px-3 py-3">Room</th>
+                            <th scope="col" class="px-3 py-3 text-center">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
                         @forelse ($schedules as $schedule)
                             <tr class="transition-colors hover:bg-gray-50/80 {{ count($schedule->recurring_days) > 1 ? 'bg-indigo-50/20' : '' }}">
-                                <td class="whitespace-nowrap px-5 py-4 font-semibold text-gray-800">
+                                <td class="truncate px-3 py-2 align-middle font-semibold text-gray-800" title="{{ $schedule->subject->subject_code ?? '—' }}">
                                     {{ $schedule->subject->subject_code ?? '—' }}</td>
-                                <td class="px-5 py-4 text-gray-600">{{ $schedule->instructor->first_name ?? '' }}
-                                    {{ $schedule->instructor->last_name ?? '—' }}</td>
-                                <td class="whitespace-nowrap px-5 py-4 text-gray-600">{{ $schedule->section->section_name ?? '—' }}</td>
-                                <td class="whitespace-nowrap px-5 py-4 text-gray-600">{{ ucfirst($schedule->day) }}</td>
-                                <td class="whitespace-nowrap px-5 py-4 text-gray-600">
+                                <td class="px-3 py-2 align-middle text-gray-600">
+                                    @php($instructorName = trim(($schedule->instructor->first_name ?? '') . ' ' . ($schedule->instructor->last_name ?? '—')))
+                                    <span class="block truncate" title="{{ $instructorName }}" tabindex="0">{{ $instructorName }}</span>
+                                </td>
+                                <td class="truncate px-3 py-2 align-middle text-gray-600" title="{{ $schedule->section->section_name ?? '—' }}">{{ $schedule->section->section_name ?? '—' }}</td>
+                                <td class="whitespace-nowrap px-3 py-2 align-middle text-gray-600">{{ ucfirst($schedule->day) }}</td>
+                                <td class="whitespace-nowrap px-3 py-2 align-middle text-gray-600">
                                     {{ \Illuminate\Support\Carbon::parse($schedule->start_time)->format('g:i A') }}
                                     -
                                     {{ \Illuminate\Support\Carbon::parse($schedule->end_time)->format('g:i A') }}
                                 </td>
-                                <td class="whitespace-nowrap px-5 py-4 text-gray-600">{{ $schedule->room }}</td>
-                                <td class="px-5 py-4 text-right">
+                                <td class="truncate px-3 py-2 align-middle text-gray-600" title="{{ $schedule->room }}">{{ $schedule->room }}</td>
+                                <td class="px-3 py-2 text-center align-middle">
                                     <x-record-action-menu>
                                         <button type="button"
                                             @click="editModal = {{ Illuminate\Support\Js::from([
@@ -153,7 +164,7 @@
 
                     <div class="mb-4">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-                        <x-admin-lookup-field :endpoint="route('admin.lookups.subjects')" name="subject_id" model="createSubjectId"
+                        <x-schedule-lookup-field :endpoint="route('admin.lookups.subjects')" name="subject_id" model="createSubjectId"
                             :selected="old('_form') === 'create' ? old('subject_id') : null" placeholder="Search subjects..." empty-label="-- Select Subject --" />
                         @error('subject_id')
                             <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
@@ -162,7 +173,7 @@
 
                     <div class="mb-4">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Instructor</label>
-                        <x-admin-lookup-field :endpoint="route('admin.lookups.instructors')" name="instructor_id" model="createInstructorId"
+                        <x-schedule-lookup-field :endpoint="route('admin.lookups.instructors')" name="instructor_id" model="createInstructorId"
                             :selected="old('_form') === 'create' ? old('instructor_id') : null" placeholder="Search instructors..."
                             empty-label="-- Select Instructor --" />
                         @error('instructor_id')
@@ -172,7 +183,7 @@
 
                     <div class="mb-4">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Section</label>
-                        <x-admin-lookup-field :endpoint="route('admin.lookups.sections')" name="section_id" model="createSectionId"
+                        <x-schedule-lookup-field :endpoint="route('admin.lookups.sections')" name="section_id" model="createSectionId"
                             :selected="old('_form') === 'create' ? old('section_id') : null" placeholder="Search sections..." empty-label="-- Select Section --" />
                         @error('section_id')
                             <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
@@ -292,7 +303,7 @@
 
                         <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-                            <x-admin-lookup-field :endpoint="route('admin.lookups.subjects')" name="subject_id" model="editModal.subject_id"
+                            <x-schedule-lookup-field :endpoint="route('admin.lookups.subjects')" name="subject_id" model="editModal.subject_id"
                                 :selected="old('_form') === 'edit' ? old('subject_id') : null" placeholder="Search subjects..." empty-label="-- Select Subject --"
                                 lookup-key="schedule-edit" />
                             @if (old('_form') === 'edit')
@@ -304,7 +315,7 @@
 
                         <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700 mb-1">Instructor</label>
-                            <x-admin-lookup-field :endpoint="route('admin.lookups.instructors')" name="instructor_id"
+                            <x-schedule-lookup-field :endpoint="route('admin.lookups.instructors')" name="instructor_id"
                                 model="editModal.instructor_id" :selected="old('_form') === 'edit' ? old('instructor_id') : null" placeholder="Search instructors..."
                                 empty-label="-- Select Instructor --" lookup-key="schedule-edit" />
                             @if (old('_form') === 'edit')
@@ -316,7 +327,7 @@
 
                         <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700 mb-1">Section</label>
-                            <x-admin-lookup-field :endpoint="route('admin.lookups.sections')" name="section_id" model="editModal.section_id"
+                            <x-schedule-lookup-field :endpoint="route('admin.lookups.sections')" name="section_id" model="editModal.section_id"
                                 :selected="old('_form') === 'edit' ? old('section_id') : null" placeholder="Search sections..." empty-label="-- Select Section --"
                                 lookup-key="schedule-edit" />
                             @if (old('_form') === 'edit')
@@ -477,3 +488,4 @@
         </x-admin-modal>
     </div>
 </x-app-layout>
+

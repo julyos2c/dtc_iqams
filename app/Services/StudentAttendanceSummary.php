@@ -27,6 +27,18 @@ class StudentAttendanceSummary
         });
     }
 
+    /** Calculate dashboard values using the same rows on a summary cache miss. */
+    public function dashboardForStudent(Student $student): array
+    {
+        $rows = null;
+        $summary = $this->cache->rememberStudent((int) $student->user_id, function () use ($student, &$rows): array {
+            $rows = $this->ratedRows($student);
+            return $this->totals($rows);
+        });
+
+        return ['summary' => $summary, 'overview' => $this->overviewFromRows($rows ?? $this->ratedRows($student))];
+    }
+
     /**
      * Return chart-ready attendance rates using the exact same rated-session
      * rules as the student summary. There is no academic-term date table, so
@@ -37,8 +49,11 @@ class StudentAttendanceSummary
      */
     public function overviewForStudent(Student $student): array
     {
-        $rows = $this->ratedRows($student);
+        return $this->overviewFromRows($this->ratedRows($student));
+    }
 
+    private function overviewFromRows(Collection $rows): array
+    {
         $today = now(config('app.timezone'))->startOfDay();
         $firstRated = $rows->first(fn ($row) => $row->status !== 'excused' && $row->event_attendance_mode !== 'cancelled');
         $semesterStart = $firstRated

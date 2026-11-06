@@ -15,13 +15,15 @@ export function installNavigationFeedback(win, doc, loader) {
         if (destination.origin === current.origin && destination.pathname === current.pathname
             && destination.search === current.search && destination.hash) return;
         // Do not preventDefault, fetch HTML, replace content, or push history.
-        begin();
+        queueMicrotask(() => { if (!event.defaultPrevented) begin(); });
     });
 
     doc.addEventListener('submit', (event) => {
         const form = event.target;
         if (!event.defaultPrevented && form instanceof win.HTMLFormElement
-            && (!form.target || form.target.toLowerCase() === '_self') && form.checkValidity()) begin();
+            && (!form.target || form.target.toLowerCase() === '_self') && form.checkValidity()) {
+            queueMicrotask(() => { if (!event.defaultPrevented) begin(); });
+        }
     });
 
     win.addEventListener('pageshow', () => loader.stop());
