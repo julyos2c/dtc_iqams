@@ -25,12 +25,13 @@ function setup() {
     return { win, doc, counts, click };
 }
 
-test('sidebar clicks leave the destination and history under native browser control', () => {
+test('sidebar clicks leave the destination and history under native browser control', async () => {
     const { click, counts, win } = setup();
     win.fetch = () => assert.fail('Navigation must not fetch a duplicate document');
     win.history = { pushState: () => assert.fail('Navigation must not push stale URLs') };
     assert.equal(click('/instructor/attendance').defaultPrevented, false);
     assert.equal(click('/instructor/summary').defaultPrevented, false);
+    await Promise.resolve();
     assert.equal(counts.starts, 2);
     win.dispatchEvent(new Event('popstate'));
     assert.equal(counts.starts, 2, 'Back/forward must not start a competing async navigation');
@@ -48,14 +49,15 @@ test('downloads, new tabs, modified clicks, hashes and cancelled actions show no
     assert.equal(counts.starts, 0);
 });
 
-test('same-page filters and explicit self links remain native navigations', () => {
+test('same-page filters and explicit self links remain native navigations', async () => {
     const { click, counts } = setup();
     assert.equal(click('?month=2026-08').defaultPrevented, false);
     assert.equal(click('/scanner', { link: { target: '_self' } }).defaultPrevented, false);
+    await Promise.resolve();
     assert.equal(counts.starts, 2);
 });
 
-test('valid forms show feedback, cancelled logout does not, and back cache resets feedback', () => {
+test('valid forms show feedback, cancelled logout does not, and back cache resets feedback', async () => {
     const { win, doc, counts } = setup();
     for (const cancelled of [true, false]) {
         const event = new Event('submit', { cancelable: true });
@@ -63,8 +65,17 @@ test('valid forms show feedback, cancelled logout does not, and back cache reset
         if (cancelled) event.preventDefault();
         doc.dispatchEvent(event);
     }
+    await Promise.resolve();
     assert.equal(counts.starts, 1);
     assert.equal(counts.navigating, 1);
     win.dispatchEvent(new Event('pageshow'));
     assert.equal(counts.stops, 1);
+});
+
+test('actions cancelled by a later listener do not start navigation feedback', async () => {
+    const { doc, counts, click } = setup();
+    doc.addEventListener('click', event => event.preventDefault());
+    click('/cancelled');
+    await Promise.resolve();
+    assert.equal(counts.starts, 0);
 });

@@ -16,6 +16,7 @@ class Student extends Model
         'student_no',
         'first_name',
         'last_name',
+        'name_suffix',
         'middle_name',
         'contact_number',
         'qr_code',
@@ -49,6 +50,6 @@ class Student extends Model
  
     public function fullName(): string
     {
-        return trim("{$this->first_name} {$this->middle_name} {$this->last_name}");
+        return implode(' ', array_filter([$this->first_name, $this->middle_name, $this->last_name, $this->name_suffix], fn ($part) => filled($part)));
     }
 }

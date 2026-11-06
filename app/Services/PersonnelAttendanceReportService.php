@@ -48,12 +48,12 @@ class PersonnelAttendanceReportService
         return ['date' => $date->copy(), 'rows' => $rows, 'filters' => $filters];
     }
 
-    public function filterOptions(): array
+    public function filterOptions(?Collection $unfilteredPersonnel = null): array
     {
         return [
             'departments' => Department::active()->orderBy('department_name')->get(['id', 'department_code', 'department_name']),
             'officeUnits' => OfficeUnit::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
-            'personnel' => $this->personnel([])->map(fn (array $person) => [
+            'personnel' => ($unfilteredPersonnel ?? $this->personnel([]))->map(fn (array $person) => [
                 'user_id' => $person['user_id'],
                 'name' => $person['name'],
                 'personnel_type' => $person['personnel_type'],

@@ -12,9 +12,8 @@
         analyticsTimer: null,
         clockTimer: null,
         clockDate: '',
-        page: 1,
-        perPage: 10,
-        filters: { search: '', role: '', department: '', section: '', subject: '', status: '', period: 'today' },
+        dailyHover: null,
+        weeklyHover: null,
         init() {
             this.tick();
             this.clockTimer = setInterval(() => this.tick(), 1000);
@@ -48,7 +47,6 @@
                 if (fresh.date !== this.data.date) {
                     this.data = { ...this.data, ...fresh, scans: [] };
                     this.cursor = fresh.cursor;
-                    this.page = 1;
                     return;
                 }
                 const scansById = new Map(this.data.scans.map(scan => [scan.id, scan]));
@@ -91,27 +89,6 @@
                 // Keep the last valid analytics snapshot visible during a transient failure.
             } finally { this.analyticsLoading = false; }
         },
-        get filteredScans() {
-            const query = this.filters.search.toLowerCase().trim();
-            const now = new Date();
-            return this.data.scans.filter(scan => {
-                const haystack = [scan.identifier, scan.name, scan.role, scan.group, scan.subject, scan.subject_code].filter(Boolean).join(' ').toLowerCase();
-                const date = new Date(scan.timestamp);
-                const periodMatch = this.filters.period === 'all' ||
-                    (this.filters.period === 'today' && date.toDateString() === now.toDateString()) ||
-                    (this.filters.period === 'week' && (now - date) <= 7 * 86400000);
-                return (!query || haystack.includes(query)) && (!this.filters.role || scan.role_key === this.filters.role) &&
-                    (!this.filters.department || scan.department === this.filters.department) &&
-                    (!this.filters.section || scan.section === this.filters.section) &&
-                    (!this.filters.subject || scan.subject === this.filters.subject) &&
-                    (!this.filters.status || scan.status === this.filters.status) && periodMatch;
-            });
-        },
-        get pageCount() { return Math.max(1, Math.ceil(this.filteredScans.length / this.perPage)); },
-        get pagedScans() { this.page = Math.min(this.page, this.pageCount); return this.filteredScans.slice((this.page - 1) * this.perPage, this.page * this.perPage); },
-        resetFilters() { this.filters = { search: '', role: '', department: '', section: '', subject: '', status: '', period: 'today' };
-            this.page = 1; },
-        roleColor(role) { return { student: 'bg-sky-50 text-sky-700', instructor: 'bg-violet-50 text-violet-700', staff: 'bg-amber-50 text-amber-700' } [role] || 'bg-slate-100 text-slate-600'; },
         statusColor(status) { return { present: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20', late: 'bg-amber-50 text-amber-700 ring-amber-600/20', incomplete: 'bg-red-50 text-red-700 ring-red-600/20', absent: 'bg-red-50 text-red-700 ring-red-600/20', excused: 'bg-slate-100 text-slate-600 ring-slate-500/20' } [status] || 'bg-slate-100 text-slate-600 ring-slate-500/20'; },
         actionColor(action) { return action === 'time_out' ? 'bg-orange-50 text-orange-700 ring-orange-600/20' : 'bg-blue-50 text-blue-700 ring-blue-600/20'; },
         max(items) { return Math.max(1, ...items.map(item => item.value)); },
@@ -259,6 +236,7 @@
                     </div>
                 </div>
 
+                <div class="grid gap-5 lg:grid-cols-2">
                 {{-- Today overview --}}
                 <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <h2 class="font-semibold text-slate-900">Today's Attendance Overview</h2>
@@ -287,63 +265,6 @@
                         </template>
                     </div>
                 </div>
-            </section>
-
-            {{-- Analytics --}}
-            <section class="mt-6 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
-                <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h3 class="text-sm font-semibold text-slate-900">Daily Scan Trend</h3>
-                            <p class="text-xs text-slate-500">Scans by hour today</p>
-                        </div><span class="text-xs font-medium text-blue-600">Live</span>
-                    </div>
-                    <div class="mt-5 h-40 w-full"><svg class="h-full w-full overflow-visible" viewBox="0 0 560 140"
-                            preserveAspectRatio="none">
-                            <defs>
-                                <linearGradient id="trendFill" x1="0" y1="0" x2="0"
-                                    y2="1">
-                                    <stop offset="0" stop-color="#3b82f6" stop-opacity=".28" />
-                                    <stop offset="1" stop-color="#3b82f6" stop-opacity="0" />
-                                </linearGradient>
-                            </defs>
-                            <line x1="0" y1="120" x2="560" y2="120" stroke="#e2e8f0" />
-                            <polygon :points="`0,120 ${points(data.charts.hourly)} 560,120`" fill="url(#trendFill)" />
-                            <polyline :points="points(data.charts.hourly)" fill="none" stroke="#2563eb"
-                                stroke-width="3" vector-effect="non-scaling-stroke" stroke-linecap="round"
-                                stroke-linejoin="round" />
-                        </svg></div>
-                    <div class="flex justify-between text-[10px] text-slate-400"><template
-                            x-for="(item, i) in data.charts.hourly"><span x-show="i % 2 === 0"
-                                x-text="item.label"></span></template></div>
-                </article>
-                <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <h3 class="text-sm font-semibold text-slate-900">Attendance by User Type</h3>
-                    <p class="text-xs text-slate-500">Today's scan distribution</p>
-                    <div class="mt-5 space-y-4"><template x-for="(item, i) in data.charts.roles">
-                            <div>
-                                <div class="mb-1 flex justify-between text-xs"><span class="text-slate-600"
-                                        x-text="item.label"></span><b class="text-slate-800" x-text="item.value"></b>
-                                </div>
-                                <div class="h-2 rounded-full bg-slate-100">
-                                    <div class="h-2 rounded-full"
-                                        :class="['bg-blue-600', 'bg-violet-500', 'bg-amber-500'][i]"
-                                        :style="`width:${item.value / max(data.charts.roles) * 100}%`"></div>
-                                </div>
-                            </div>
-                        </template></div>
-                </article>
-                <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <h3 class="text-sm font-semibold text-slate-900">Attendance Status</h3>
-                    <p class="text-xs text-slate-500">Current status breakdown</p>
-                    <div class="mt-5 grid grid-cols-2 gap-3"><template x-for="(item, i) in data.charts.statuses">
-                            <div class="rounded-xl bg-slate-50 p-3"><span class="mb-2 block h-2 w-2 rounded-full"
-                                    :class="['bg-emerald-500', 'bg-amber-500', 'bg-red-500', 'bg-slate-400'][i]"></span>
-                                <p class="text-xl font-bold text-slate-900" x-text="item.value"></p>
-                                <p class="text-[11px] text-slate-500" x-text="item.label"></p>
-                            </div>
-                        </template></div>
-                </article>
                 <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <h3 class="text-sm font-semibold text-slate-900">By Department</h3>
                     <p class="text-xs text-slate-500">Top teaching departments</p>
@@ -360,161 +281,91 @@
                             data today</p>
                     </div>
                 </article>
+                </div>
+            </section>
+
+            {{-- Analytics --}}
+            <section class="mt-6 grid gap-4 lg:grid-cols-2">
                 <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <h3 class="text-sm font-semibold text-slate-900">Student Scans by Subject</h3>
-                    <p class="text-xs text-slate-500">Most active subjects today</p>
-                    <div class="mt-4 space-y-2"><template x-for="item in data.charts.subjects">
-                            <div class="flex items-center gap-2"><span class="w-20 truncate text-xs text-slate-600"
-                                    x-text="item.label"></span>
-                                <div class="h-2 flex-1 rounded bg-slate-100">
-                                    <div class="h-2 rounded bg-cyan-500"
-                                        :style="`width:${item.value / max(data.charts.subjects) * 100}%`"></div>
-                                </div><b class="w-6 text-right text-xs" x-text="item.value"></b>
-                            </div>
-                        </template>
-                        <p x-show="!data.charts.subjects.length" class="py-8 text-center text-xs text-slate-400">No
-                            data today</p>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-sm font-semibold text-slate-900">Daily Scan Trend</h3>
+                            <p class="text-xs text-slate-500">Scans by hour today</p>
+                        </div><span class="text-xs font-medium text-blue-600">Live</span>
                     </div>
+                    <div class="relative mt-5 h-40 w-full"><svg class="h-full w-full overflow-visible" viewBox="0 0 560 140"
+                            preserveAspectRatio="none">
+                            <defs>
+                                <linearGradient id="trendFill" x1="0" y1="0" x2="0"
+                                    y2="1">
+                                    <stop offset="0" stop-color="#3b82f6" stop-opacity=".28" />
+                                    <stop offset="1" stop-color="#3b82f6" stop-opacity="0" />
+                                </linearGradient>
+                            </defs>
+                            <line x1="0" y1="120" x2="560" y2="120" stroke="#e2e8f0" />
+                            <polygon :points="`0,120 ${points(data.charts.hourly)} 560,120`" fill="url(#trendFill)" />
+                            <polyline :points="points(data.charts.hourly)" fill="none" stroke="#2563eb"
+                                stroke-width="3" vector-effect="non-scaling-stroke" stroke-linecap="round"
+                                stroke-linejoin="round" />
+                            <template x-for="(item, index) in data.charts.hourly" :key="item.label">
+                                <g @mouseenter="dailyHover = index" @mouseleave="dailyHover = null"
+                                    @focus="dailyHover = index" @blur="dailyHover = null" tabindex="0"
+                                    :aria-label="`${item.label}: ${item.value} scans`">
+                                    <rect :x="data.charts.hourly.length === 1 ? 0 : Math.max(0, index * 560 / (data.charts.hourly.length - 1) - 560 / (2 * (data.charts.hourly.length - 1)))"
+                                        y="0" :width="data.charts.hourly.length === 1 ? 560 : (index === 0 || index === data.charts.hourly.length - 1 ? 280 / (data.charts.hourly.length - 1) : 560 / (data.charts.hourly.length - 1))"
+                                        height="140" fill="transparent" />
+                                    <circle x-show="dailyHover === index" :cx="data.charts.hourly.length === 1 ? 0 : index * 560 / (data.charts.hourly.length - 1)"
+                                        :cy="120 - item.value / max(data.charts.hourly) * 105" r="4" fill="#2563eb" vector-effect="non-scaling-stroke" />
+                                </g>
+                            </template>
+                        </svg>
+                        <div x-cloak x-show="dailyHover !== null" class="pointer-events-none absolute top-0 -translate-x-1/2 rounded-lg bg-slate-800 px-2 py-1 text-xs font-medium text-white shadow"
+                            :style="`left: ${data.charts.hourly.length <= 1 ? 0 : Math.max(8, Math.min(92, dailyHover * 100 / (data.charts.hourly.length - 1)))}%`"
+                            x-text="dailyHover === null ? '' : `${data.charts.hourly[dailyHover].label}: ${data.charts.hourly[dailyHover].value} scans`"></div>
+                    </div>
+                    <div class="flex justify-between text-[10px] text-slate-400"><template
+                            x-for="(item, i) in data.charts.hourly"><span x-show="i % 2 === 0"
+                                x-text="item.label"></span></template></div>
                 </article>
-                <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+                <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <h3 class="text-sm font-semibold text-slate-900">Weekly Attendance Trend</h3>
                     <p class="text-xs text-slate-500">Scan activity for the current week</p>
-                    <div class="mt-5 flex h-32 items-end gap-3"><template x-for="item in data.charts.weekly">
-                            <div class="flex h-full flex-1 flex-col justify-end text-center"><span
-                                    class="mb-1 text-xs font-semibold text-slate-700" x-text="item.value"></span>
-                                <div class="mx-auto w-full max-w-10 rounded-t-md bg-gradient-to-t from-blue-600 to-cyan-400 transition-all"
-                                    :style="`height:${Math.max(4, item.value / max(data.charts.weekly) * 90)}px`">
-                                </div><span class="mt-2 text-[11px] text-slate-500" x-text="item.label"></span>
-                            </div>
-                        </template></div>
+                    <div class="relative mt-5 h-40 w-full">
+                        <svg class="h-full w-full overflow-visible" viewBox="0 0 560 140" preserveAspectRatio="none" aria-hidden="true">
+                            <defs>
+                                <linearGradient id="weeklyTrendFill" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0" stop-color="#3b82f6" stop-opacity=".28" />
+                                    <stop offset="1" stop-color="#3b82f6" stop-opacity="0" />
+                                </linearGradient>
+                            </defs>
+                            <line x1="0" y1="120" x2="560" y2="120" stroke="#e2e8f0" />
+                            <polygon :points="`0,120 ${points(data.charts.weekly)} 560,120`" fill="url(#weeklyTrendFill)" />
+                            <polyline :points="points(data.charts.weekly)" fill="none" stroke="#2563eb"
+                                stroke-width="3" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" />
+                            <template x-for="(item, index) in data.charts.weekly" :key="item.label">
+                                <g @mouseenter="weeklyHover = index" @mouseleave="weeklyHover = null"
+                                    @focus="weeklyHover = index" @blur="weeklyHover = null" tabindex="0"
+                                    :aria-label="`${item.label}: ${item.value} scans`">
+                                    <rect :x="data.charts.weekly.length === 1 ? 0 : Math.max(0, index * 560 / (data.charts.weekly.length - 1) - 560 / (2 * (data.charts.weekly.length - 1)))"
+                                        y="0" :width="data.charts.weekly.length === 1 ? 560 : (index === 0 || index === data.charts.weekly.length - 1 ? 280 / (data.charts.weekly.length - 1) : 560 / (data.charts.weekly.length - 1))"
+                                        height="140" fill="transparent" />
+                                    <circle x-show="weeklyHover === index" :cx="data.charts.weekly.length === 1 ? 0 : index * 560 / (data.charts.weekly.length - 1)"
+                                        :cy="120 - item.value / max(data.charts.weekly) * 105" r="4" fill="#2563eb" vector-effect="non-scaling-stroke" />
+                                </g>
+                            </template>
+                        </svg>
+                        <div x-cloak x-show="weeklyHover !== null" class="pointer-events-none absolute top-0 -translate-x-1/2 rounded-lg bg-slate-800 px-2 py-1 text-xs font-medium text-white shadow"
+                            :style="`left: ${data.charts.weekly.length <= 1 ? 0 : Math.max(8, Math.min(92, weeklyHover * 100 / (data.charts.weekly.length - 1)))}%`"
+                            x-text="weeklyHover === null ? '' : `${data.charts.weekly[weeklyHover].label}: ${data.charts.weekly[weeklyHover].value} scans`"></div>
+                    </div>
+                    <div class="flex justify-between gap-2 text-center text-[11px] text-slate-500">
+                        <template x-for="item in data.charts.weekly" :key="item.label">
+                            <span x-text="item.label"></span>
+                        </template>
+                    </div>
                 </article>
             </section>
 
-            {{-- Detailed table --}}
-            <section class="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div class="border-b border-slate-100 p-5">
-                    <div class="mb-4 flex items-center justify-between">
-                        <div>
-                            <h2 class="font-semibold text-slate-900">Attendance Records</h2>
-                            <p class="text-xs text-slate-500">Detailed, searchable scan history</p>
-                        </div><span class="text-xs text-slate-500"><b x-text="filteredScans.length"></b>
-                            records</span>
-                    </div>
-                    <form id="attendance-filters" @submit.prevent
-                        class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-                        <input x-model="filters.search" @input="page=1" type="search" placeholder="Name or ID..."
-                            class="rounded-lg border-slate-200 text-xs focus:border-blue-500 focus:ring-blue-500 xl:hidden">
-                        <select x-model="filters.role" @change="page=1" class="rounded-lg border-slate-200 text-xs">
-                            <option value="">All roles</option>
-                            <option value="student">Students</option>
-                            <option value="instructor">Teaching</option>
-                            <option value="staff">Non-teaching</option>
-                        </select>
-                        <select x-model="filters.department" @change="page=1"
-                            class="rounded-lg border-slate-200 text-xs">
-                            <option value="">All departments</option><template
-                                x-for="item in data.filters.departments">
-                                <option :value="item" x-text="item"></option>
-                            </template>
-                        </select>
-                        <select x-model="filters.section" @change="page=1"
-                            class="rounded-lg border-slate-200 text-xs">
-                            <option value="">All sections</option><template
-                                x-for="item in data.filters.sections">
-                                <option :value="item" x-text="item"></option>
-                            </template>
-                        </select>
-                        <select x-model="filters.subject" @change="page=1"
-                            class="rounded-lg border-slate-200 text-xs">
-                            <option value="">All subjects</option><template
-                                x-for="item in data.filters.subjects">
-                                <option :value="item" x-text="item"></option>
-                            </template>
-                        </select>
-                        <select x-model="filters.status" @change="page=1"
-                            class="rounded-lg border-slate-200 text-xs">
-                            <option value="">All statuses</option>
-                            <option value="present">Present</option>
-                            <option value="late">Late</option>
-                            <option value="absent">Missing</option>
-                            <option value="excused">Excused</option>
-                        </select>
-                        <select x-model="filters.period" @change="page=1"
-                            class="rounded-lg border-slate-200 text-xs">
-                            <option value="today">Today</option>
-                            <option value="week">Last 7 days</option>
-                            <option value="all">All loaded</option>
-                        </select>
-                        <button type="button" @click="resetFilters"
-                            class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50">Reset</button>
-                    </form>
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="min-w-[1250px] w-full text-left text-xs">
-                        <thead class="bg-slate-50 uppercase tracking-wide text-slate-500">
-                            <tr>
-                                <th class="px-5 py-3">Photo</th>
-                                <th class="px-3 py-3">User ID</th>
-                                <th class="px-3 py-3">Name</th>
-                                <th class="px-3 py-3">Role</th>
-                                <th class="px-3 py-3">Section / Department</th>
-                                <th class="px-3 py-3">Subject</th>
-                                <th class="px-3 py-3">Date</th>
-                                <th class="px-3 py-3">Time scanned</th>
-                                <th class="px-3 py-3">Type</th>
-                                <th class="px-3 py-3">Status</th>
-                                <th class="px-5 py-3 text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100"><template x-for="scan in pagedScans"
-                                :key="scan.id">
-                                <tr class="hover:bg-slate-50">
-                                    <td class="px-5 py-3">
-                                        <div class="h-9 w-9 overflow-hidden rounded-lg bg-blue-50"><img
-                                                x-show="scan.avatar" :src="scan.avatar"
-                                                class="h-full w-full object-cover" alt=""><span
-                                                x-show="!scan.avatar"
-                                                class="flex h-full items-center justify-center font-bold text-blue-700"
-                                                x-text="scan.initials"></span></div>
-                                    </td>
-                                    <td class="px-3 py-3 font-mono font-medium text-slate-700"
-                                        x-text="scan.identifier"></td>
-                                    <td class="px-3 py-3 font-semibold text-slate-800" x-text="scan.name"></td>
-                                    <td class="px-3 py-3"><span class="inline-flex min-h-7 items-center justify-center whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] leading-none font-medium"
-                                            :class="roleColor(scan.role_key)" x-text="scan.role"></span></td>
-                                    <td class="px-3 py-3 text-slate-600" x-text="scan.group"></td>
-                                    <td class="px-3 py-3 text-slate-600" x-text="scan.subject || '—'"></td>
-                                    <td class="px-3 py-3 text-slate-500" x-text="scan.date"></td>
-                                    <td class="px-3 py-3 font-medium tabular-nums text-slate-700" x-text="scan.time">
-                                    </td>
-                                    <td class="px-3 py-3"><span
-                                            class="inline-flex min-h-7 items-center justify-center whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] leading-none font-medium ring-1 ring-inset"
-                                            :class="actionColor(scan.attendance_type)"
-                                            x-text="scan.attendance_label"></span></td>
-                                    <td class="px-3 py-3"><span
-                                            class="inline-flex min-h-7 items-center justify-center whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] leading-none font-medium ring-1 ring-inset"
-                                            :class="statusColor(scan.status)" x-text="scan.status_label"></span></td>
-                                    <td class="px-5 py-3 text-right"><a
-                                            :href="`{{ url('attendance-logs') }}?search=${encodeURIComponent(scan.identifier)}`"
-                                            class="font-semibold text-blue-600 hover:text-blue-800">View</a></td>
-                                </tr>
-                            </template>
-                            <tr x-show="!pagedScans.length">
-                                <td colspan="11" class="px-6 py-12 text-center text-sm text-slate-400">No attendance
-                                    records match these filters.</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div class="flex items-center justify-between border-t border-slate-100 px-5 py-4">
-                    <p class="text-xs text-slate-500">Page <b x-text="page"></b> of <b x-text="pageCount"></b></p>
-                    <div class="flex gap-2"><button type="button" @click="page--" :disabled="page <= 1"
-                            class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium disabled:opacity-40">Previous</button><button
-                            type="button" @click="page++" :disabled="page >= pageCount"
-                            class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium disabled:opacity-40">Next</button>
-                    </div>
-                </div>
-            </section>
         </div>
 
     </div>

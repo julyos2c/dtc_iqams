@@ -23,6 +23,28 @@ class StudentAttendanceSummaryTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_dashboard_reuses_cold_summary_rows_and_preserves_results(): void
+    {
+        [$student, $schedule] = $this->fixture();
+        $this->log($student->user, $schedule, Carbon::parse('2026-08-03 08:05', 'Asia/Manila'), 'present');
+        $service = app(StudentAttendanceSummary::class);
+        $expectedOverview = $service->overviewForStudent($student);
+        \Illuminate\Support\Facades\Cache::flush();
+        \Illuminate\Support\Facades\DB::enableQueryLog();
+        \Illuminate\Support\Facades\DB::flushQueryLog();
+        $dashboard = $service->dashboardForStudent($student);
+        $dashboardQueries = count(\Illuminate\Support\Facades\DB::getQueryLog());
+        \Illuminate\Support\Facades\Cache::flush();
+        \Illuminate\Support\Facades\DB::flushQueryLog();
+        $expectedSummary = $service->forStudent($student);
+        $service->overviewForStudent($student);
+        $separateQueries = count(\Illuminate\Support\Facades\DB::getQueryLog());
+        \Illuminate\Support\Facades\DB::disableQueryLog();
+        $this->assertSame($expectedSummary, $dashboard['summary']);
+        $this->assertSame($expectedOverview, $dashboard['overview']);
+        $this->assertLessThan($separateQueries, $dashboardQueries);
+    }
+
     protected function setUp(): void
     {
         parent::setUp();

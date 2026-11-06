@@ -129,6 +129,9 @@ Route::middleware(['auth', 'active', 'password.changed', 'role:admin'])->group(f
     Route::patch('school-events/{schoolEvent}/cancel', [SchoolEventController::class, 'cancel'])->middleware(['permission:manage-school-events', 'password.confirm'])->name('school-events.cancel');
     Route::patch('users/{user}/status', [UserAccountStatusController::class, 'update'])->middleware(['permission:manage-users', 'password.confirm'])->name('users.status.update');
     Route::post('users/{user}/password/reset', [UserAccountPasswordController::class, 'reset'])->middleware(['permission:manage-users', 'password.confirm'])->name('users.password.reset');
+    Route::get('admin/users/{user}/qr', [\App\Http\Controllers\QrManagementController::class, 'show'])->middleware('permission:manage-users')->name('admin.qr.show');
+    Route::post('admin/users/{user}/qr/revoke', [\App\Http\Controllers\QrManagementController::class, 'revoke'])->middleware('permission:manage-users')->name('admin.qr.revoke');
+    Route::post('admin/users/{user}/qr/reissue', [\App\Http\Controllers\QrManagementController::class, 'reissue'])->middleware('permission:manage-users')->name('admin.qr.reissue');
     Route::get('admin/id-cards/{user}', [IdCardController::class, 'adminShow'])->middleware('permission:manage-users')->name('admin.id-card.show');
 });
 

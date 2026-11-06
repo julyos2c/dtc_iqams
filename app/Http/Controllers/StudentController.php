@@ -14,6 +14,7 @@ use App\Services\RoleAssignmentService;
 use App\Services\ProfileImageService;
 use App\Services\StudentScheduleEligibility;
 use App\Rules\SectionBelongsToCourse;
+use App\Support\UserManagementSearch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -25,17 +26,21 @@ class StudentController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $students = Student::query()
-            ->select(['id', 'user_id', 'course_id', 'section_id', 'enrollment_type', 'student_no', 'first_name', 'last_name', 'middle_name', 'status', 'created_at'])
+        $search = trim((string) $request->query('search', ''));
+        $query = Student::query();
+        UserManagementSearch::apply($query, $search, 'student_no');
+
+        $students = (clone $query)
+            ->select(['id', 'user_id', 'course_id', 'section_id', 'enrollment_type', 'student_no', 'first_name', 'last_name', 'middle_name', 'name_suffix', 'status', 'created_at'])
             ->with([
                 'user:id,username,name,email,avatar_path,status,must_change_password',
                 'course:id,course_code,course_name',
                 'section:id,section_name,course_id',
                 'scheduleEnrollments:student_id,recurring_schedule_group_id',
             ])
-            ->latest('students.created_at')->paginate(10);
+            ->latest('students.created_at')->paginate(10)->withQueryString();
 
         $courses = Course::active()->orderBy('course_name')->get(['id', 'department_id', 'course_code', 'course_name']);
 
@@ -52,7 +57,7 @@ class StudentController extends Controller
                 ];
             })->values();
 
-        $studentUserIds = Student::query()->pluck('user_id')->values();
+        $studentUserIds = (clone $query)->pluck('user_id')->values();
         return view('students.index', compact('students', 'courses', 'sections', 'offerings', 'studentUserIds'));
 
     }
@@ -80,12 +85,15 @@ class StudentController extends Controller
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
+            'name_suffix' => 'nullable|string|max:100',
             'email' => 'required|email|unique:users,email',
-            'avatar' => 'required|image|mimes:jpg,jpeg,png|max:2048',
+            'avatar' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
         ]);
         $this->validateEnrollmentGroups($validated);
 
-        $avatarPath = app(ProfileImageService::class)->store($request->file('avatar'));
+        $avatarPath = $request->hasFile('avatar')
+            ? app(ProfileImageService::class)->store($request->file('avatar'))
+            : null;
 
         $administrator = $request->user();
 
@@ -95,7 +103,7 @@ class StudentController extends Controller
                 $temporaryPassword = 'Student@'.$studentNo;
                 $user = User::create([
                     'username' => $studentNo,
-                    'name' => $validated['first_name'].' '.$validated['last_name'],
+                    'name' => implode(' ', array_filter([$validated['first_name'], $validated['last_name'], $validated['name_suffix'] ?? null])),
                     'email' => $validated['email'],
                     'avatar_path' => $avatarPath,
                     'password' => Hash::make($temporaryPassword),
@@ -115,6 +123,7 @@ class StudentController extends Controller
                     'first_name' => $validated['first_name'],
                     'last_name' => $validated['last_name'],
                     'middle_name' => $validated['middle_name'] ?? null,
+                    'name_suffix' => $validated['name_suffix'] ?? null,
                     'section_id' => $validated['section_id'] ?? null,
                     'enrollment_type' => $validated['enrollment_type'],
                     'course_id' => $validated['course_id'],
@@ -169,6 +178,7 @@ class StudentController extends Controller
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
+            'name_suffix' => 'nullable|string|max:100',
             'status' => 'required|in:active,inactive,graduated,dropped',
             'avatar' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
         ]);
@@ -184,7 +194,7 @@ class StudentController extends Controller
                 $student->update($validated);
                 $eligibility->sync($student, $validated['enrollment_group_ids'] ?? []);
                 $student->user->update(array_filter([
-                    'name' => $validated['first_name'].' '.$validated['last_name'],
+                    'name' => implode(' ', array_filter([$validated['first_name'], $validated['last_name'], $validated['name_suffix'] ?? null])),
                     'avatar_path' => $newAvatarPath,
                 ], fn ($value) => $value !== null));
             });

@@ -94,7 +94,7 @@ class AdminDashboardData
     {
         return $this->cache->rememberAdminAnalytics(function () use ($generatedAt, $today, $tomorrow, $weekStart, $references): array {
             $roleMetrics = $this->roleMetrics($today, $tomorrow);
-            $statusMetrics = $this->statusMetrics($today, $tomorrow);
+            $lateCount = $this->lateCount($today, $tomorrow);
             $personnelRows = $this->personnelRows($today, $tomorrow);
             [$incompleteUsers, $missingTimeout, $incompleteByRole] = $this->personnelExceptions($personnelRows, $generatedAt->hour);
 
@@ -105,7 +105,7 @@ class AdminDashboardData
                 'staff' => (int) ($roleMetrics->get('staff')['users'] ?? 0),
                 'present' => $this->currentlyPresentCount($generatedAt),
                 'absent' => $this->absentUserCount($today, $generatedAt),
-                'late' => (int) ($statusMetrics->get('late') ?? 0),
+                'late' => $lateCount,
                 'missing_timeout' => $missingTimeout,
                 'incomplete' => $incompleteUsers,
             ];
@@ -114,17 +114,7 @@ class AdminDashboardData
                 'stats' => $stats,
                 'charts' => [
                     'hourly' => $this->hourly($today, $tomorrow),
-                    'roles' => [
-                        ['label' => 'Students', 'value' => (int) ($roleMetrics->get('student')['scans'] ?? 0)],
-                        ['label' => 'Teaching', 'value' => (int) ($roleMetrics->get('instructor')['scans'] ?? 0)],
-                        ['label' => 'Non-teaching', 'value' => (int) ($roleMetrics->get('staff')['scans'] ?? 0)],
-                    ],
-                    'statuses' => collect(['present', 'late', 'absent', 'incomplete', 'missing'])->map(fn ($status) => [
-                        'label' => ucfirst($status),
-                        'value' => $status === 'incomplete' ? $incompleteUsers : ($status === 'missing' ? $missingTimeout : (int) ($statusMetrics->get($status) ?? 0)),
-                    ])->all(),
                     'departments' => $this->departments($today, $tomorrow),
-                    'subjects' => $this->subjects($today, $tomorrow),
                     'weekly' => $this->weekly($weekStart, $generatedAt->copy()->endOfDay()),
                 ],
                 'overview' => [
@@ -220,18 +210,17 @@ class AdminDashboardData
             ->where('attendance_logs.record_origin', 'scanner')
             ->where('attendance_logs.record_state', 'canonical')
             ->groupBy('roles.name')
-            ->selectRaw('roles.name as role_name, COUNT(*) as scans, COUNT(DISTINCT attendance_logs.user_id) as users, SUM(CASE WHEN attendance_logs.status = ? THEN 1 ELSE 0 END) as present, SUM(CASE WHEN attendance_logs.status = ? THEN 1 ELSE 0 END) as late', ['present', 'late'])
+            ->selectRaw('roles.name as role_name, COUNT(DISTINCT attendance_logs.user_id) as users, SUM(CASE WHEN attendance_logs.status = ? THEN 1 ELSE 0 END) as present, SUM(CASE WHEN attendance_logs.status = ? THEN 1 ELSE 0 END) as late', ['present', 'late'])
             ->get()->mapWithKeys(fn ($row) => [$row->role_name => [
-                'scans' => (int) $row->scans, 'users' => (int) $row->users,
+                'users' => (int) $row->users,
                 'present' => (int) $row->present, 'late' => (int) $row->late,
             ]]);
     }
 
-    private function statusMetrics(Carbon $from, Carbon $to): Collection
+    private function lateCount(Carbon $from, Carbon $to): int
     {
         return DB::table('attendance_logs')->where('scan_time', '>=', $from)->where('scan_time', '<', $to)
-            ->where('record_state', 'canonical')
-            ->groupBy('status')->selectRaw('status, COUNT(*) as aggregate')->pluck('aggregate', 'status');
+            ->where('record_state', 'canonical')->where('status', 'late')->count();
     }
 
     private function personnelRows(Carbon $from, Carbon $to): Collection
@@ -452,18 +441,6 @@ class AdminDashboardData
             ->groupBy('departments.department_code')->orderByDesc('aggregate')->limit(8)
             ->selectRaw("COALESCE(departments.department_code, 'Unassigned') as label, COUNT(*) as aggregate")
             ->get()->map(fn ($row) => ['label' => $row->label, 'value' => (int) $row->aggregate])->all();
-    }
-
-    private function subjects(Carbon $from, Carbon $to): array
-    {
-        return DB::table('attendance_logs')->join('schedules', 'schedules.id', '=', 'attendance_logs.schedule_id')
-            ->join('subjects', 'subjects.id', '=', 'schedules.subject_id')
-            ->where('attendance_logs.scan_time', '>=', $from)->where('attendance_logs.scan_time', '<', $to)
-            ->where('attendance_logs.record_origin', 'scanner')
-            ->where('attendance_logs.record_state', 'canonical')
-            ->groupBy('subjects.subject_code')->orderByDesc('aggregate')->limit(8)
-            ->selectRaw('subjects.subject_code as label, COUNT(*) as aggregate')->get()
-            ->map(fn ($row) => ['label' => $row->label, 'value' => (int) $row->aggregate])->all();
     }
 
     private function overviewRow(string $label, string $role, Collection $metrics, int $total, bool $fourScan, int $incomplete = 0): array

@@ -16,7 +16,7 @@ class QrCredentialService
         return DB::transaction(function () use ($user, $administrator): ?QrCredential {
             $lockedUser = User::query()->lockForUpdate()->findOrFail($user->id);
 
-            if ($lockedUser->qrCredentials()->where('status', 'active')->exists()) {
+            if ($lockedUser->qrCredentials()->exists()) {
                 return null;
             }
 
@@ -26,7 +26,12 @@ class QrCredentialService
 
     public function issue(User $user, ?User $administrator = null): QrCredential
     {
+        return DB::transaction(function () use ($user, $administrator) {
+        $user = User::query()->lockForUpdate()->findOrFail($user->id);
         $this->assertEligible($user);
+        if ($user->qrCredentials()->where('status', 'active')->exists()) {
+            throw ValidationException::withMessages(['qr_code' => 'An active QR code already exists.']);
+        }
 
         do {
             $code = 'IQAMS-'.Str::random(43);
@@ -48,12 +53,20 @@ class QrCredentialService
         ], $administrator);
 
         return $credential;
+        }, 3);
     }
 
     public function activeFor(User $user): QrCredential
     {
-        return QrCredential::where('user_id', $user->id)->where('status', 'active')->latest('id')->first()
-            ?? $this->issue($user);
+        return DB::transaction(function () use ($user) {
+            $user = User::query()->lockForUpdate()->findOrFail($user->id);
+            $active = $user->qrCredentials()->where('status', 'active')->first();
+            if ($active) return $active;
+            if ($user->qrCredentials()->exists()) {
+                throw ValidationException::withMessages(['qr_code' => 'Your QR code is revoked. Please contact the administrator.']);
+            }
+            return $this->issue($user);
+        }, 3);
     }
 
     public function plainText(QrCredential $credential): string
@@ -66,6 +79,7 @@ class QrCredentialService
         return DB::transaction(function () use ($user, $administrator) {
             $lockedUser = User::query()->lockForUpdate()->findOrFail($user->id);
             $this->assertEligible($lockedUser);
+            $this->retireLegacy($lockedUser, $administrator);
 
             $activeCredentials = QrCredential::query()
                 ->where('user_id', $lockedUser->id)
@@ -80,22 +94,61 @@ class QrCredentialService
                         'status' => 'revoked',
                         'revoked_by' => $administrator?->id,
                         'revoked_at' => now(),
+                        'revocation_reason' => 'reissuance',
                     ]);
 
                 app(AuditLogger::class)->record('qr.revoked', $lockedUser, [
                     'count' => $activeCredentials->count(),
-                    'reason' => 'regeneration',
+                    'reason' => 'reissuance', 'previous_status' => 'active', 'updated_status' => 'revoked',
                 ], $administrator);
             }
 
             $replacement = $this->issue($lockedUser, $administrator);
 
             app(AuditLogger::class)->record('qr.regenerated', $lockedUser, [
-                'revoked_count' => $activeCredentials->count(),
+                'reason' => 'reissuance', 'previous_status' => $activeCredentials->isNotEmpty() ? 'active' : 'revoked', 'updated_status' => 'active',
             ], $administrator);
 
             return $replacement;
         });
+    }
+
+    public function revoke(User $user, User $administrator, string $reason): void
+    {
+        DB::transaction(function () use ($user, $administrator, $reason) {
+            $user = User::query()->lockForUpdate()->findOrFail($user->id);
+            $this->assertEligible($user);
+            $legacy = $this->retireLegacy($user, $administrator, $reason);
+            $active = $user->qrCredentials()->where('status', 'active')->lockForUpdate()->get();
+            if ($active->isEmpty() && ! $legacy) {
+                throw ValidationException::withMessages(['qr_code' => 'There is no active QR code to revoke.']);
+            }
+            $user->qrCredentials()->where('status', 'active')->update([
+                'status' => 'revoked', 'revoked_by' => $administrator->id,
+                'revoked_at' => now(), 'revocation_reason' => $reason,
+            ]);
+            app(AuditLogger::class)->record('qr.revoked', $user, [
+                'reason' => $reason, 'previous_status' => 'active', 'updated_status' => 'revoked',
+            ], $administrator);
+        }, 3);
+    }
+
+    private function retireLegacy(User $user, ?User $administrator, string $reason = 'reissuance'): bool
+    {
+        $retired = false;
+        foreach (['student', 'instructor', 'nonTeachingStaff'] as $relation) {
+            $profile = $user->{$relation}()->lockForUpdate()->first();
+            if (! $profile || ! $profile->qr_code) continue;
+            $code = $profile->qr_code;
+            QrCredential::firstOrCreate(['code_hash' => hash('sha256', $code)], [
+                'user_id' => $user->id, 'encrypted_code' => Crypt::encryptString($code),
+                'status' => 'revoked', 'issued_at' => now(), 'revoked_at' => now(),
+                'revoked_by' => $administrator?->id, 'revocation_reason' => $reason,
+            ]);
+            $profile->update(['qr_code' => null]);
+            $retired = true;
+        }
+        return $retired;
     }
 
     private function assertEligible(User $user): void

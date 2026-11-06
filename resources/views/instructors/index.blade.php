@@ -11,18 +11,19 @@
         editModal: { show: false, id: null, employee_no: '', email: '', department_id: '', name_prefix: '', first_name: '', middle_name: '', last_name: '', professional_credentials: '', avatar_url: '' },
         deleteModal: { show: false, id: null, name: '' },
         statusModal: { show: false, userId: null, name: '', status: '' },
-        qrModal: { show: false, value: '', label: '' },
         selectedIds: [],
         allIds: @js($instructorUserIds),
         toggleAll() { this.selectedIds = this.selectedIds.length === this.allIds.length ? [] : [...this.allIds]; }
-    }"
-        @keydown.escape.window="showCreateModal = false; editModal.show = false; deleteModal.show = false; statusModal.show = false; qrModal.show = false">
+    }" @user-management-results.window="allIds = $event.detail; selectedIds = []"
+        @keydown.escape.window="showCreateModal = false; editModal.show = false; deleteModal.show = false; statusModal.show = false">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             <div data-repeatable-list class="overflow-hidden rounded-lg bg-white shadow-sm">
                 <div
-                    class="flex flex-col gap-3 border-b border-gray-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-                    <span class="text-sm text-gray-500">{{ $instructors->total() }} total</span>
-                    <div class="flex flex-wrap items-center gap-2"><button type="button"
+                    class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-6 py-4">
+                    <span class="text-sm text-gray-500" data-user-search-count>{{ $instructors->total() }} total</span>
+                    <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+                        <x-user-management-search />
+                        <button type="button"
                             @click="window.ensureIqamsQrCode().then(() => window.printIqamsIdCards(selectedIds.map(id => '{{ url('admin/id-cards') }}/' + id))).catch(error => window.alert(error.message))"
                             :disabled="selectedIds.length === 0"
                             class="whitespace-nowrap rounded border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">Print
@@ -32,76 +33,41 @@
                         </button></div>
                 </div>
 
-                <div class="overflow-x-auto">
-                    <table
-                        class="min-w-[1200px] w-full table-fixed text-left text-sm [&_th]:px-4 [&_th]:py-3 [&_th]:align-middle [&_th]:text-xs [&_th]:font-semibold [&_th]:tracking-wide [&_td]:px-4 [&_td]:py-4 [&_td]:align-middle [&_td:nth-child(7)]:whitespace-nowrap [&_td:nth-child(8)]:whitespace-nowrap">
+
+                <div class="overflow-x-auto" data-user-search-table data-user-ids="{{ $instructorUserIds->toJson() }}">
+                    <table class="w-full table-fixed text-left text-sm [&_th]:px-2 [&_th]:py-3 [&_th]:align-middle [&_th]:text-xs [&_th]:font-semibold [&_th]:tracking-wide [&_td]:px-2 [&_td]:py-3 [&_td]:align-top sm:[&_th]:px-3 sm:[&_td]:px-3">
                         <colgroup>
-                            <col class="w-12">
-                            <col class="w-32">
-                            <col class="w-20">
-                            <col class="w-56">
-                            <col class="w-60">
-                            <col class="w-72">
-                            <col class="w-44">
-                            <col class="w-24">
+                            <col class="w-[52%] md:w-[34%]">
+                            <col class="hidden md:table-column md:w-[17%]">
+                            <col class="hidden md:table-column md:w-[19%]">
+                            <col class="w-[30%] md:w-[20%]">
+                            <col class="w-[18%] md:w-[10%]">
                         </colgroup>
                         <thead class="bg-gray-50 text-xs uppercase text-gray-500">
                             <tr>
-                                <th><label class="flex items-center gap-2 normal-case whitespace-nowrap"><input
-                                            type="checkbox"
-                                            :checked="selectedIds.length === allIds.length && allIds.length > 0"
-                                            @change="toggleAll()"
-                                            class="rounded border-gray-300 text-indigo-600"><span>
-                                            </span></label></th>
-                                <th>Instructor ID</th> {{-- keep the employee no in the data base nevermind the table --}}
-                                <th>Profile</th>
-                                <th>Name</th>
-                                <th>Department</th>
-                                <th>Email</th>
+                                <th><div class="flex items-center gap-2"><input type="checkbox" aria-label="Select all instructors on this page" :checked="selectedIds.length === allIds.length && allIds.length > 0" @change="toggleAll()" class="mr-2 rounded border-gray-300 text-indigo-600"><span>Instructor</span></div></th>
+                                <th class="hidden md:table-cell">Instructor ID</th>
+                                <th class="hidden md:table-cell">Department</th>
                                 <th>Status</th>
-                                <th class="whitespace-nowrap text-right">Actions</th>
+                                <th class="text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100">
                             @forelse ($instructors as $instructor)
                                 <tr class="transition-colors hover:bg-gray-50/80">
-                                    <td><input type="checkbox" value="{{ $instructor->user_id }}"
-                                            :checked="selectedIds.includes({{ $instructor->user_id }})"
-                                            @change="selectedIds = $event.target.checked ? [...selectedIds, {{ $instructor->user_id }}] : selectedIds.filter(id => id !== {{ $instructor->user_id }})"
-                                            class="rounded border-gray-300 text-indigo-600"></td>
-                                    <td class="whitespace-nowrap font-medium text-gray-800">
-                                        {{ $instructor->employee_no }}</td>
-                                    <td><img loading="lazy" width="40" height="40"
-                                            src="{{ $instructor->user->avatar_thumbnail_url ?? asset('images/default-avatar.svg') }}"
-                                            alt="Profile photo" class="h-10 w-10 rounded-full object-cover"></td>
-                                    <td class="break-words text-gray-600">{{ $instructor->fullName() }}</td>
-                                    <td class="break-words text-gray-600">
-                                        {{ $instructor->department->department_name ?? '—' }}</td>
-                                    <td class="truncate text-gray-600" title="{{ $instructor->user->email ?? '—' }}">{{ $instructor->user->email ?? '—' }}</td>
-                                    <td class="whitespace-nowrap">
+                                    <td><x-user-management-identity :user="$instructor->user" :name="$instructor->fullName()" :identifier="$instructor->employee_no" :detail="$instructor->department->department_code ?? $instructor->department->department_name ?? '—'" :detail-title="$instructor->department->department_name ?? '—'" /></td>
+                                    <td class="hidden break-words font-medium text-gray-800 !align-top md:table-cell">{{ $instructor->employee_no }}</td>
+                                    <td class="hidden break-words text-gray-600 !align-top md:table-cell" title="{{ $instructor->department->department_name ?? '—' }}">{{ $instructor->department->department_code ?? $instructor->department->department_name ?? '—' }}</td>
+                                    <td>
                                         <x-student-status :status="$instructor->user->status" />
                                         @if ($instructor->user->must_change_password)
-                                            <span class="mt-1 block text-xs font-medium text-amber-700">Password setup
-                                                required</span>
+                                            <span class="mt-1 block text-xs font-medium text-amber-700">Password setup required</span>
                                         @endif
                                     </td>
-                                    <td class="whitespace-nowrap text-right">
+                                    <td class="text-right">
                                         <x-action-menu :delete-action="route('instructors.destroy', $instructor)" :toggle-action="route('users.status.update', $instructor->user)" :next-status="$instructor->user->isAccountActive() ? 'inactive' : 'active'"
                                             :is-active="$instructor->user->isAccountActive()" :requires-password-confirmation="true" :delete-name="$instructor->fullName()">
-                                            <x-slot:reset>
-                                                <form method="POST"
-                                                    action="{{ route('users.password.reset', $instructor->user) }}"
-                                                    data-password-confirmation-required
-                                                    data-password-reset-confirmation-required>
-                                                    @csrf
-                                                    <button type="submit">Send password reset link</button>
-                                                </form>
-                                            </x-slot:reset>
-                                            <x-slot:qr><button type="button"
-                                                    @click="fetch('{{ url('admin/id-cards') }}/{{ $instructor->user_id }}', { headers: { Accept: 'application/json' }, credentials: 'same-origin' }).then(response => response.json().then(data => { if (!response.ok) throw new Error(data.message || 'QR unavailable.'); qrModal = { show: true, value: data.qr_code, label: data.name }; })).catch(error => window.alert(error.message))">View
-                                                    QR</button><button type="button"
-                                                    @click="window.ensureIqamsQrCode().then(() => window.printIqamsIdCard('{{ url('admin/id-cards') }}/{{ $instructor->user_id }}')).catch(error => window.alert(error.message))">Print
-                                                    ID Card</button></x-slot:qr>
+                                            <x-slot:qr><button type="button" @click="$dispatch('manage-qr', {{ Illuminate\Support\Js::from(['id' => $instructor->user_id, 'role' => 'Instructor', 'avatar' => $instructor->user->avatar_thumbnail_url ?? asset('images/default-avatar.svg'), 'detail_label' => 'Department', 'detail' => $instructor->department->department_code ?? $instructor->department->department_name ?? 'Not assigned']) }})">Manage QR Code</button></x-slot:qr>
                                             <x-slot:edit><button type="button"
                                                     @click="editModal = {{ Illuminate\Support\Js::from(['show' => true, 'id' => $instructor->id, 'employee_no' => $instructor->employee_no, 'email' => $instructor->user->email ?? '', 'department_id' => (string) $instructor->department_id, 'name_prefix' => $instructor->name_prefix ?? '', 'first_name' => $instructor->first_name, 'middle_name' => $instructor->middle_name ?? '', 'last_name' => $instructor->last_name, 'professional_credentials' => $instructor->professional_credentials ?? '', 'avatar_url' => $instructor->user->avatar_thumbnail_url ?? asset('images/default-avatar.svg')]) }}">Edit</button></x-slot:edit>
                                         </x-action-menu>
@@ -109,16 +75,15 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="8" class="px-6 py-8 text-center text-gray-400">
-                                        No instructors yet. Add your first one.
-                                    </td>
+                                    <td colspan="5" class="px-6 py-8 text-center text-gray-400">
+                                        {{ trim((string) request()->query('search', '')) !== '' ? 'No users found matching your search' : 'No instructors yet. Add your first one.' }}</td>
                                 </tr>
                             @endforelse
                         </tbody>
                     </table>
                 </div>
 
-                <div class="border-t border-gray-200 px-6 py-4">
+                <div class="border-t border-gray-200 px-6 py-4" data-user-search-pagination>
                     {{ $instructors->links() }}
                 </div>
             </div>
@@ -143,7 +108,7 @@
                         <div class="grid grid-cols-1 gap-x-5 gap-y-3 md:grid-cols-2">
                             <div class="md:col-span-2">
                                 <label class="mb-1 block text-sm font-medium text-gray-700">Profile Photo</label>
-                                <input type="file" name="avatar" accept="image/jpeg,image/png" required
+                                <input type="file" name="avatar" accept="image/jpeg,image/png"
                                     class="block w-full text-sm text-gray-600">
                                 @error('avatar')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
@@ -379,6 +344,6 @@
         </div>
 
         <x-account-status-modal />
-        <x-qr-modal />
     </div>
+    <x-qr-management-modal />
 </x-app-layout>

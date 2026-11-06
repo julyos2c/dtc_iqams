@@ -49,6 +49,38 @@ class AccountInvitationTest extends TestCase
         }
     }
 
+    public function test_users_can_be_created_without_profile_photos(): void
+    {
+        $admin = $this->user('admin');
+        $department = Department::create(['department_code' => 'OPT', 'department_name' => 'Optional Photo Department']);
+        $course = Course::create(['department_id' => $department->id, 'course_code' => 'OPT', 'course_name' => 'Optional Photo Course']);
+        $section = Section::create(['course_id' => $course->id, 'section_name' => 'A', 'school_year' => '2026-2027', 'semester' => '1st']);
+        $office = OfficeUnit::create(['code' => 'OPT', 'name' => 'Optional Photo Office', 'is_active' => true]);
+
+        $this->actingAs($admin)->post(route('students.store'), [
+            'course_id' => $course->id, 'section_id' => $section->id, 'enrollment_type' => 'regular',
+            'student_no' => 'OPT-STU', 'first_name' => 'Test', 'last_name' => 'Student', 'name_suffix' => 'Jr.', 'email' => 'optional.student@example.test',
+        ])->assertSessionHasNoErrors()->assertRedirect(route('students.index'));
+        $this->actingAs($admin)->post(route('instructors.store'), [
+            'department_id' => $department->id, 'employee_no' => 'OPT-INS', 'first_name' => 'Test', 'last_name' => 'Instructor', 'email' => 'optional.instructor@example.test',
+        ])->assertSessionHasNoErrors()->assertRedirect(route('instructors.index'));
+        $this->actingAs($admin)->post(route('non-teaching-staff.store'), [
+            'office_unit_id' => $office->id, 'employee_no' => 'OPT-STAFF', 'first_name' => 'Test', 'last_name' => 'Staff', 'email' => 'optional.staff@example.test',
+        ])->assertSessionHasNoErrors()->assertRedirect(route('non-teaching-staff.index'));
+
+        foreach (['OPT-STU', 'OPT-INS', 'OPT-STAFF'] as $username) {
+            $this->assertNull(User::where('username', $username)->firstOrFail()->avatar_path);
+        }
+        $student = User::where('username', 'OPT-STU')->firstOrFail()->student;
+        $this->assertSame('Test Student Jr.', $student->fullName());
+        $this->actingAs($admin)->withSession(['auth.password_confirmed_at' => time()])->put(route('students.update', $student), [
+            'course_id' => $course->id, 'section_id' => $section->id, 'enrollment_type' => 'regular',
+            'first_name' => 'Test', 'last_name' => 'Student', 'name_suffix' => 'III', 'status' => 'active',
+        ])->assertSessionHasNoErrors()->assertRedirect(route('students.index'));
+        $this->assertSame('Test Student III', $student->fresh()->fullName());
+        $this->assertSame('Test Student III', $student->user->fresh()->name);
+    }
+
     public function test_student_instructor_and_staff_creation_display_role_based_temporary_passwords_without_setup_links(): void
     {
         Storage::fake('public');

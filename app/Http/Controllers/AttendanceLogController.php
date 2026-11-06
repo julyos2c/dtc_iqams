@@ -55,6 +55,20 @@ class AttendanceLogController extends Controller
             $query->where('user_id', $request->integer('user_id'));
         }
 
+        $search = trim((string) $request->query('search', ''));
+        if ($search !== '') {
+            foreach (preg_split('/\s+/', $search) as $term) {
+                $like = '%'.$term.'%';
+                $query->whereHas('user', function ($user) use ($like) {
+                    $user->where('name', 'like', $like)
+                        ->orWhere('username', 'like', $like)
+                        ->orWhereHas('student', fn ($person) => $person->where('first_name', 'like', $like)->orWhere('last_name', 'like', $like)->orWhere('student_no', 'like', $like))
+                        ->orWhereHas('instructor', fn ($person) => $person->where('first_name', 'like', $like)->orWhere('last_name', 'like', $like)->orWhere('employee_no', 'like', $like))
+                        ->orWhereHas('nonTeachingStaff', fn ($person) => $person->where('first_name', 'like', $like)->orWhere('last_name', 'like', $like)->orWhere('employee_no', 'like', $like));
+                });
+            }
+        }
+
         $logs = $query->latest('scan_time')->paginate(15)->withQueryString();
 
         return view('attendance-logs.index', compact('logs'));
