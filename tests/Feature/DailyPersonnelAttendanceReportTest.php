@@ -76,6 +76,21 @@ class DailyPersonnelAttendanceReportTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_monthly_report_print_request_contains_all_recorded_days_in_the_selected_month(): void
+    {
+        $admin = $this->user('admin');
+        $staff = $this->staff('Monthly', 'Example');
+        foreach (['2026-08-01 08:00', '2026-08-15 08:10', '2026-08-31 08:20', '2026-09-01 08:30'] as $time) {
+            $this->log($staff->user, 'morning_in', 'time_in', Carbon::parse($time));
+        }
+
+        $this->actingAs($admin)->get(route('admin.reports.daily-personnel.index', [
+            'period' => 'monthly', 'month' => '2026-08', 'personnel_id' => $staff->user_id, 'print' => '1',
+        ]))->assertOk()->assertViewHas('monthly', true)
+            ->assertSee('2026-08-01')->assertSee('2026-08-15')->assertSee('2026-08-31')
+            ->assertDontSee('2026-09-01')->assertSee('window.print()', false);
+    }
+
     public function test_combined_report_maps_actual_period_times_and_keeps_missing_values_blank(): void
     {
         $date = Carbon::parse('2026-08-30');

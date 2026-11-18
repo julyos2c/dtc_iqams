@@ -9,6 +9,11 @@ use LogicException;
 
 class AuditLog extends \Illuminate\Database\Eloquent\Model
 {
+    public function newEloquentBuilder($query): AuditLogBuilder
+    {
+        return new AuditLogBuilder($query);
+    }
+
     public $timestamps = false;
 
     protected $fillable = [
@@ -92,6 +97,10 @@ class AuditLog extends \Illuminate\Database\Eloquent\Model
             $subject instanceof Schedule => $this->scheduleLabel($subject),
             $subject instanceof SchoolEvent => $subject->title ?: 'School event',
             $subject instanceof LeaveRequest => 'Leave request',
+            $subject instanceof EnrollmentRequest => 'Enrollment request #'.$subject->id,
+            $subject instanceof StudentRegistrationRequest => 'Student registration request #'.$subject->id,
+            $subject instanceof ClassListSubmissionBatch => 'Class list submission batch #'.$subject->id,
+            $subject instanceof ClassList => $subject->recurring_schedule_group_id ? 'Subject roster #'.$subject->id : 'Saved student draft #'.$subject->id,
             $subject instanceof AttendanceLog => 'Attendance record',
             $subject instanceof ScannerTerminal => $subject->name ?: 'Scanner terminal',
             $subject instanceof SecurityFlag => $subject->category ? $this->humanize($subject->category) : 'Security flag',

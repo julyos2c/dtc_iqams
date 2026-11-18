@@ -32,9 +32,10 @@ class AttendanceScheduleValidator
 
         $occurrence = $this->occurrences->resolveAt($schedule, $occurredAt);
 
-        if (! $this->eligibility->isEligibleForSchedule($student, $schedule)
+        if (! $this->eligibility->isEligibleForSchedule($student, $schedule, $occurredAt)
             || ! $occurrence
-            || $this->events->affectingOccurrence($occurrence)) {
+            || $this->events->affectingOccurrence($occurrence)
+            || app(ClassCancellationService::class)->status($occurrence) === 'approved') {
             throw ValidationException::withMessages([
                 'schedule_id' => self::DENIED_MESSAGE,
             ]);

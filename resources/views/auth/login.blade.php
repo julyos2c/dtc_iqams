@@ -64,5 +64,6 @@
         </button>
         </div>
     </form>
+    <p class="mt-5 text-center text-xs text-slate-500"><a data-no-navigation-loader class="font-semibold text-teal-700 underline hover:text-teal-900" href="{{ route('privacy-notice') }}">Privacy Notice (draft)</a></p>
     </div>
 </x-guest-layout>

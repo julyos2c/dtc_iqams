@@ -106,6 +106,44 @@ class AdminDashboardRequirementTest extends TestCase
         $this->assertSame(0, app(AdminDashboardData::class)->build()['stats']['absent']);
     }
 
+    public function test_pending_and_approved_cancellations_hide_existing_absence_without_changing_it(): void
+    {
+        Carbon::setTestNow('2026-08-19 10:30:00');
+        $student = $this->studentWithSchedule();
+        $schedule = Schedule::where('section_id', $student->section_id)->firstOrFail();
+        $log = AttendanceLog::where('user_id', $student->user_id)->firstOrFail();
+        $cancellation = \App\Models\ClassCancellationRequest::create([
+            'schedule_id' => $schedule->id, 'occurrence_date' => '2026-08-19',
+            'opens_at' => '2026-08-19 07:45:00', 'ends_at' => '2026-08-19 10:00:59',
+            'requester_id' => $schedule->instructor->user_id, 'reason' => 'Test', 'status' => 'pending',
+        ]);
+        $dashboard = app(AdminDashboardData::class);
+        $this->assertSame(0, $dashboard->analytics()['stats']['absent']);
+        $cancellation->update(['status' => 'approved']);
+        app(\App\Services\AttendanceSummaryCache::class)->forgetAdminAnalytics();
+        $this->assertSame(0, $dashboard->analytics()['stats']['absent']);
+        $cancellation->update(['status' => 'rejected']);
+        app(\App\Services\AttendanceSummaryCache::class)->forgetAdminAnalytics();
+        $this->assertSame(1, $dashboard->analytics()['stats']['absent']);
+        $this->assertSame('absent', $log->fresh()->status);
+    }
+
+    public function test_late_users_are_distinct_while_hourly_chart_counts_records(): void
+    {
+        Carbon::setTestNow('2026-08-19 10:30:00');
+        $student = $this->studentWithSchedule();
+        $existing = AttendanceLog::where('user_id', $student->user_id)->firstOrFail();
+        $existing->update(['status' => 'late']);
+        \Illuminate\Support\Facades\DB::table('attendance_logs')->insert([
+            'user_id' => $student->user_id, 'attendance_type' => 'time_out',
+            'scan_time' => '2026-08-19 08:30:00', 'status' => 'late', 'record_state' => 'canonical',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $analytics = app(AdminDashboardData::class)->analytics();
+        $this->assertSame(1, $analytics['stats']['late']);
+        $this->assertSame(2, $analytics['charts']['late_hourly'][8]['value']);
+    }
+
     private function studentWithSchedule(): Student
     {
         $department = Department::create(['department_code' => 'ABS', 'department_name' => 'Absence Department']);

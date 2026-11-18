@@ -20,6 +20,99 @@ class InstructorClassAttendanceTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_cancellation_class_choices_and_requests_are_limited_to_assigned_schedules(): void
+    {
+        [$teacher, $otherTeacher, $subject, $section, $otherSection] = $this->classroom();
+        $assigned = $this->schedule($teacher->instructor, $subject, $section, 'monday');
+        $other = $this->schedule($otherTeacher->instructor, $subject, $otherSection, 'monday');
+
+        $this->actingAs($teacher)->get(route('instructor.schedule'))
+            ->assertOk()
+            ->assertSee('value="'.$assigned->id.'" data-day="monday"', false)
+            ->assertDontSee('value="'.$other->id.'" data-day="monday"', false);
+
+        $this->post(route('instructor.schedule.cancellation', $other), [
+            'occurrence_date' => '2026-08-24', 'reason' => 'Unavailable',
+        ])->assertForbidden();
+    }
+
+    public function test_active_cancellation_is_unique_and_pending_allows_student_attendance(): void
+    {
+        Carbon::setTestNow('2026-08-24 09:00:00');
+        [$teacher, , $subject, $section] = $this->classroom();
+        $schedule = $this->schedule($teacher->instructor, $subject, $section, 'monday');
+        $student = $this->student($section, 'STU-CANCEL-3', 'Test', 'Student');
+        $service = app(\App\Services\ClassCancellationService::class);
+        $service->submit($schedule, Carbon::parse('2026-08-24'), 'Unavailable', $teacher);
+        $this->assertNotNull(app(\App\Services\AttendanceScheduleValidator::class)->validate($student->user, $schedule, Carbon::parse('2026-08-24 10:01:00')));
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+        $service->submit($schedule, Carbon::parse('2026-08-24'), 'Duplicate', $teacher);
+    }
+
+    public function test_reconciliation_failure_rolls_back_review(): void
+    {
+        Carbon::setTestNow('2026-08-24 12:00:00');
+        [$teacher, , $subject, $section] = $this->classroom();
+        $schedule = $this->schedule($teacher->instructor, $subject, $section, 'monday');
+        $service = app(\App\Services\ClassCancellationService::class);
+        $item = $service->submit($schedule, Carbon::parse('2026-08-24'), 'Unavailable', $teacher);
+        $this->mock(\App\Services\StudentAbsenceService::class)->shouldReceive('markOccurrenceDue')->once()->andThrow(new \RuntimeException('write failed'));
+        try {
+            $service->review($item, 'rejected', null, User::factory()->create());
+            $this->fail('Expected reconciliation to fail.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('write failed', $exception->getMessage());
+        }
+        $this->assertDatabaseHas('class_cancellation_requests', ['id' => $item->id, 'status' => 'pending', 'reviewer_id' => null]);
+    }
+
+    public function test_rejection_before_cutoff_waits_for_normal_absence_processing(): void
+    {
+        Carbon::setTestNow('2026-08-24 09:00:00');
+        [$teacher, , $subject, $section] = $this->classroom();
+        $schedule = $this->schedule($teacher->instructor, $subject, $section, 'monday');
+        $student = $this->student($section, 'STU-CANCEL-4', 'Test', 'Student');
+        $service = app(\App\Services\ClassCancellationService::class);
+        $item = $service->submit($schedule, Carbon::parse('2026-08-24'), 'Unavailable', $teacher);
+        $service->review($item, 'rejected', null, User::factory()->create());
+        $this->assertDatabaseMissing('attendance_logs', ['user_id' => $student->user_id, 'schedule_id' => $schedule->id]);
+        Carbon::setTestNow('2026-08-24 12:00:00');
+        app(\App\Services\StudentAbsenceService::class)->markDue();
+        $this->assertDatabaseHas('attendance_logs', ['user_id' => $student->user_id, 'schedule_id' => $schedule->id, 'status' => 'absent']);
+    }
+
+    public function test_pending_cancellation_holds_absence_and_rejection_reconciles(): void
+    {
+        Carbon::setTestNow('2026-08-24 09:00:00');
+        [$teacher, , $subject, $section] = $this->classroom();
+        $schedule = $this->schedule($teacher->instructor, $subject, $section, 'monday');
+        $student = $this->student($section, 'STU-CANCEL', 'Test', 'Student');
+        $service = app(\App\Services\ClassCancellationService::class);
+        $item = $service->submit($schedule, Carbon::parse('2026-08-24'), 'Unavailable', $teacher);
+        Carbon::setTestNow('2026-08-24 12:00:00');
+        $this->assertSame(0, app(\App\Services\StudentAbsenceService::class)->markDue());
+        $service->review($item, 'rejected', null, User::factory()->create());
+        $this->assertDatabaseHas('attendance_logs', ['user_id' => $student->user_id, 'schedule_id' => $schedule->id, 'status' => 'absent']);
+        $this->assertSame(0, app(\App\Services\StudentAbsenceService::class)->markDue());
+        $this->assertNotNull($service->submit($schedule, Carbon::parse('2026-08-24'), 'Another request', $teacher));
+    }
+
+    public function test_approved_cancellation_excludes_existing_attendance_from_summary(): void
+    {
+        Carbon::setTestNow('2026-08-24 09:00:00');
+        [$teacher, , $subject, $section] = $this->classroom();
+        $schedule = $this->schedule($teacher->instructor, $subject, $section, 'monday');
+        $student = $this->student($section, 'STU-CANCEL-2', 'Test', 'Student');
+        $this->log($student, $schedule, '2026-08-24 10:01:00', 'present');
+        $service = app(\App\Services\ClassCancellationService::class);
+        $item = $service->submit($schedule, Carbon::parse('2026-08-24'), 'Unavailable', $teacher);
+        $service->review($item, 'approved', null, User::factory()->create());
+        $this->assertSame(0, app(\App\Services\StudentAttendanceSummary::class)->forStudent($student)['scheduled']);
+        $this->assertDatabaseHas('attendance_logs', ['user_id' => $student->user_id, 'status' => 'present']);
+        $this->actingAs($teacher)->getJson(route('instructor.schedule.attendance', $schedule).'?date=2026-08-24')
+            ->assertOk()->assertJsonPath('class.cancellation_status', 'approved');
+    }
+
     protected function tearDown(): void
     {
         Carbon::setTestNow();

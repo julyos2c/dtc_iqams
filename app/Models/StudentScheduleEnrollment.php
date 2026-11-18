@@ -10,7 +10,9 @@ class StudentScheduleEnrollment extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['student_id', 'recurring_schedule_group_id'];
+    protected $fillable = ['student_id', 'recurring_schedule_group_id', 'effective_at', 'origin'];
+
+    protected function casts(): array { return ['effective_at' => 'datetime']; }
 
     public function student(): BelongsTo
     {

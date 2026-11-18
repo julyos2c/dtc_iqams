@@ -72,6 +72,11 @@ class AttendanceLog extends Model
         return $this->belongsTo(Schedule::class);
     }
 
+    public function excuseDecisions(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(StudentExcuseDecision::class);
+    }
+
     public function schoolEvent(): BelongsTo
     {
         return $this->belongsTo(SchoolEvent::class);

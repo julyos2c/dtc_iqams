@@ -12,7 +12,7 @@
                 <div>
                     <h2 id="attendance-overview-title"
                         class="text-xl font-bold tracking-tight text-[#10294b] sm:text-2xl">Attendance Overview</h2>
-                    <p class="mt-1 text-sm text-slate-500">Your attendance rate over time</p>
+                    <p class="mt-1 text-sm text-slate-500">Based on recorded classes so far. Present and late count as attended; excused and cancelled classes are excluded.</p>
                 </div><label
                     class="relative flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-600 shadow-sm"><svg
                         class="h-5 w-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -30,7 +30,7 @@
             <div class="relative px-3 pb-2 sm:px-7">
                 <div x-show="active" x-cloak
                     class="pointer-events-none absolute right-8 top-2 z-10 rounded-lg bg-slate-900 px-2 py-1 text-xs font-semibold text-white"
-                    x-text="active ? `${active.label}: ${format(active.percentage)}` : ''"></div>
+                    x-text="active ? `${active.label}: ${active.attended} of ${active.scheduled} attended (${format(active.percentage)})` : ''"></div>
                 <div x-show="points.length" x-cloak class="h-[300px] w-full overflow-hidden"><svg class="block h-full w-full" viewBox="0 0 760 300"
                             preserveAspectRatio="none"
                             role="img" aria-labelledby="attendance-chart-title attendance-chart-description">
@@ -64,16 +64,13 @@
                             d="M7 3v3m10-3v3M4 9h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z" />
                     </svg></div>
                 <div class="min-w-[130px]">
-                    <p class="text-sm text-slate-500">Attendance rate</p>
-                    <p data-student-stat="percentage" class="text-2xl font-bold text-emerald-700">
-                        {{ number_format($summary['percentage'], 1) }}%</p>
+                    <p class="text-sm text-slate-500">Rate for selected period</p>
+                    <p class="text-2xl font-bold text-emerald-700" x-text="periodRate">&mdash;</p>
                 </div>
                 <div class="hidden h-12 w-px bg-emerald-200 sm:block"></div>
                 <div>
-                    <p class="text-xl font-bold text-[#10294b]"><span
-                            data-student-stat="attended-count">{{ $summary['attended'] }}</span> of
-                        {{ $summary['scheduled'] }}</p>
-                    <p class="text-sm text-slate-500">rated sessions attended</p>
+                    <p class="text-xl font-bold text-[#10294b]"><span x-text="attended">0</span> of <span x-text="scheduled">0</span></p>
+                    <p class="text-sm text-slate-500">recorded classes attended</p>
                 </div>
             </div>
         </section>

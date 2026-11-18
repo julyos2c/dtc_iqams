@@ -35,9 +35,11 @@
 
             <div class="relative z-10 my-auto max-w-lg pt-16">
                 <p class="border-l-2 border-teal-300 pl-5 text-3xl font-bold leading-tight tracking-tight text-white lg:text-4xl xl:text-5xl">
+
                     “Every scan records a presence. Every presence counts.”
                 </p>
                 <p class="mt-5 max-w-md pl-5 text-base leading-7 text-slate-200">
+
                     “IQAMS makes attendance simple, accurate, and connected.”
                 </p>
             </div>
@@ -45,7 +47,7 @@
 
         <section class="relative z-10 flex min-h-screen w-full items-center justify-center px-5 py-8 sm:px-8 lg:justify-end lg:px-12 xl:px-20">
             <div class="w-full max-w-[31.25rem]">
-                <a href="/" class="mb-8 inline-flex items-center gap-3 lg:hidden">
+                <a href="/" class="mb-8 inline-flex items-center gap-3 text-white lg:hidden">
                     <span
                         class="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500 text-white shadow-lg shadow-teal-500/20">
                         <x-application-logo class="h-6 w-6" />
@@ -58,6 +60,7 @@
         </section>
     </main>
     <x-logout-confirmation />
+    <x-service-worker />
 </body>
 
 </html>

@@ -13,6 +13,7 @@ use App\Models\SchoolEvent;
 use App\Models\SchoolEventTarget;
 use App\Models\Section;
 use App\Models\Student;
+use App\Models\StudentScheduleEnrollment;
 use App\Models\Subject;
 use App\Models\User;
 use App\Observers\AttendanceSummaryCacheObserver;
@@ -30,7 +31,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(\App\Services\EnrollmentWorkflow::class);
     }
 
     /**
@@ -68,14 +69,17 @@ class AppServiceProvider extends ServiceProvider
         SchoolEventTarget::observe($observer);
         Section::observe($observer);
         Student::observe($observer);
+        StudentScheduleEnrollment::observe($observer);
         Subject::observe($observer);
         User::observe($observer);
 
         // The fixed admin portal role is the production super-admin role.
-        Gate::before(function (User $user, string $ability) {
-            // The audit trail is deliberately permission-gated even for the
-            // admin super-role so access can be revoked independently.
-            if ($ability === 'view-audit-logs') {
+        Gate::before(function (User $user, string $ability, array $arguments = []) {
+            // Audit/review permissions remain revocable. Ownership and review
+            // policies also apply to admins so private lists and self-review
+            // restrictions cannot be bypassed by the super-role.
+            if (in_array($ability, ['view-audit-logs', 'review-enrollment-requests', 'review', 'resubmit'], true)
+                || ($ability === 'update' && ($arguments[0] ?? null) instanceof \App\Models\ClassList)) {
                 return null;
             }
 

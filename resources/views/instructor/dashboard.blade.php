@@ -1,10 +1,4 @@
 @php
-    $periods = [
-        'morning_in' => ['MORNING', 'Time-In'],
-        'lunch_out' => ['MORNING', 'Time-Out'],
-        'afternoon_in' => ['AFTERNOON', 'Time-In'],
-        'final_out' => ['AFTERNOON', 'Time-Out'],
-    ];
     $progressPeriods = [
         'morning_in' => 'Morning In',
         'lunch_out' => 'Lunch Out',
@@ -79,6 +73,14 @@
     if ($currentSegment) {
         $chartSegments[] = implode(' ', $currentSegment);
     }
+    $chartAreas = array_map(function (string $segment) use ($chartTop, $chartPlotHeight): string {
+        $points = explode(' ', $segment);
+        $firstX = explode(',', $points[0])[0];
+        $lastX = explode(',', end($points))[0];
+        $baseline = $chartTop + $chartPlotHeight;
+
+        return "$firstX,$baseline $segment $lastX,$baseline";
+    }, $chartSegments);
     $chartHasData = $chartPoints->contains(fn(array $point) => $point['value'] !== null);
 @endphp
 <x-instructor-layout title="Dashboard">
@@ -110,26 +112,28 @@
                         <span data-instructor-status
                             class="inline-flex rounded-full px-3 py-1 text-xs font-bold {{ $statusClasses[$today['summaryStatus'] ?? $today['status']] ?? 'bg-amber-100 text-amber-700' }}">{{ $today['summaryStatus'] ?? $today['status'] }}</span>
                     </div>
-                    <div class="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-gray-200" role="progressbar"
+                    <div class="mt-5 h-2.5 w-full overflow-hidden rounded-full bg-gray-200" role="progressbar"
                         aria-label="Today's attendance progress" aria-valuemin="0" aria-valuemax="100"
                         aria-valuenow="{{ $today['progressPercentage'] }}" data-instructor-progress-track>
                         <div data-instructor-progress-bar
                             class="h-full rounded-full bg-emerald-500 transition-[width] duration-300"
                             style="width: {{ $today['progressPercentage'] }}%"></div>
                     </div>
-                    <div class="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                    <div class="-mt-[17px] grid grid-cols-4">
                         @foreach ($progressPeriods as $key => $label)
                             @php($log = $today['events'][$key])
                             <div data-instructor-milestone="{{ $key }}"
-                                class="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 {{ $today['nextPeriod'] === $key ? 'bg-emerald-50' : '' }}">
+                                class="flex min-w-0 flex-col items-center px-1 text-center">
                                 <span data-instructor-milestone-icon
-                                    class="grid h-6 w-6 shrink-0 place-items-center rounded-full text-sm font-bold {{ $log ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-500' }}">{{ $log ? '✓' : '○' }}</span>
-                                <span data-instructor-milestone-label
-                                    class="min-w-0 text-sm font-semibold {{ $log ? 'text-emerald-700' : 'text-gray-600' }}">{{ $label }}</span>
+                                    class="relative grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 border-white text-sm font-bold shadow-sm {{ $log ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-500' }}">{{ $log ? '✓' : '○' }}</span>
+                                <span class="mt-2 min-w-0">
+                                    <span data-instructor-milestone-label class="block text-xs font-semibold {{ $log ? 'text-emerald-700' : 'text-gray-600' }}">{{ $label }}</span>
+                                    <span data-instructor-milestone-punctuality @class(['block text-xs font-medium', 'text-rose-600' => $log && in_array($log->punctuality_status, ['late', 'early_out']), 'text-emerald-700' => $log && ! in_array($log->punctuality_status, ['late', 'early_out']), 'text-gray-500' => ! $log])>{{ $log ? str($log->punctuality_status ?? 'on_time')->replace('_', ' ')->title() : 'Not yet recorded' }}</span>
+                                </span>
                             </div>
                         @endforeach
                     </div>
-                    <p class="mt-2 border-t border-gray-100 pt-2 text-sm font-medium text-slate-600">Next: <span
+                    <p class="mt-2 border-t border-gray-100 pt-2 text-xs font-medium text-slate-600">Next: <span
                             data-instructor-next
                             class="font-bold text-slate-900">{{ $today['nextPeriod'] ? str($today['nextPeriod'])->replace('_', ' ')->title() : 'Complete' }}</span>
                     </p>
@@ -138,46 +142,6 @@
             </div>
 
             <div class="min-w-0 space-y-3 xl:col-span-8">
-                <div class="grid gap-3 lg:grid-cols-[.85fr_1.15fr]">
-                    <section class="dashboard-card rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
-                        <h2 class="text-xs font-extrabold uppercase text-[#10294b]">Punctuality Today</h2>
-                        <div class="mt-3 divide-y divide-slate-100">
-                            @foreach ($periods as $key => [$session, $label])
-                                @php($log = $today['events'][$key])
-                                <div class="flex items-center gap-3 py-2.5"><span
-                                        class="grid h-7 w-7 place-items-center rounded-full {{ $log ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400' }}">◷</span>
-                                    <p class="flex-1 text-xs font-semibold">{{ ucfirst(strtolower($session)) }}
-                                        {{ $label }}</p><span id="detail-{{ $key }}"
-                                        class="text-right text-[11px] font-medium {{ in_array($log?->punctuality_status, ['late', 'early_out']) ? 'text-rose-600' : ($log ? 'text-emerald-600' : 'text-slate-400') }}">{{ $log? str($log->punctuality_status ?? 'on_time')->replace('_', ' ')->title(): 'Not Yet Recorded' }}</span>
-                                </div>
-                            @endforeach
-                        </div>
-                    </section>
-                    <section class="dashboard-card rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
-                        <div class="flex items-center justify-between gap-3">
-                            <h2 class="text-xs font-extrabold uppercase text-[#10294b]">Monthly Attendance Overview</h2>
-                            <a href="{{ route('instructor.summary') }}"
-                                class="shrink-0 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[10px] font-semibold">{{ now()->format('F Y') }}⌄</a>
-                        </div>
-                        <div class="mt-2 grid grid-cols-2 gap-1.5 text-center sm:grid-cols-3">
-                            @foreach ([['Attendance Rate', 'attendance', $totals['percentage'] . '%', 'bg-blue-50 text-blue-700'], ['Present', 'present', $totals['presentDays'] . ' days', 'bg-emerald-50 text-emerald-700'], ['Absent', 'absent', $totals['absentDays'] . ' days', 'bg-rose-50 text-rose-700'], ['Late', 'late', $totals['lateCount'] . ' days', 'bg-orange-50 text-orange-600'], ['Early Out', 'early', $totals['earlyOutCount'] . ' days', 'bg-purple-50 text-purple-700'], ['Incomplete', 'incomplete', $totals['incompleteCount'] . ' days', 'bg-amber-50 text-amber-700'], ['In Progress', 'in_progress', $totals['inProgressCount'] . ' day' . ($totals['inProgressCount'] === 1 ? '' : 's'), 'bg-sky-50 text-sky-700']] as [$label, $key, $value, $class])
-                                <div class="rounded-lg px-2 py-1.5 {{ $class }}">
-                                    <p class="text-[10px] text-slate-600">{{ $label }}</p>
-                                    <p data-stat="{{ $key }}" class="mt-1 text-lg font-extrabold">
-                                        {{ $value }}</p>
-                                </div>
-                            @endforeach
-                        </div>
-                        <div class="mt-2 flex items-end justify-between rounded-lg border border-slate-100 px-3 py-2">
-                            <div>
-                                <p class="text-[10px] text-slate-500">Total Hours</p>
-                                <p data-stat="hours" class="text-lg font-extrabold text-slate-950">
-                                    {{ intdiv($totals['totalMinutes'], 60) }}h {{ $totals['totalMinutes'] % 60 }}m</p>
-                            </div><span class="text-3xl text-blue-300">◷</span>
-                        </div>
-                    </section>
-                </div>
-
                 @if($studentWarnings->isNotEmpty())
                     <section class="dashboard-card rounded-xl border border-amber-200 bg-amber-50/70 p-4 shadow-sm" aria-labelledby="student-risk-summary-title">
                         <div class="flex items-center justify-between gap-2">
@@ -213,6 +177,12 @@
                                 <desc id="instructor-attendance-chart-description">Attendance completion percentage for
                                     each working day this month. One hundred percent means all four attendance periods
                                     were recorded.</desc>
+                                <defs>
+                                    <linearGradient id="instructor-attendance-area" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.35" />
+                                        <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.04" />
+                                    </linearGradient>
+                                </defs>
                                 @foreach ([100, 75, 50, 25, 0] as $gridValue)
                                     @php($gridY = $chartTop + ((100 - $gridValue) * $chartPlotHeight) / 100)
                                     <line x1="{{ $chartLeft }}" y1="{{ $gridY }}"
@@ -221,7 +191,8 @@
                                     <text x="{{ $chartLeft - 10 }}" y="{{ $gridY + 4 }}" text-anchor="end"
                                         fill="#64748b" font-size="11">{{ $gridValue }}%</text>
                                 @endforeach
-                                @foreach ($chartSegments as $segment)
+                                @foreach ($chartSegments as $index => $segment)
+                                    <polygon points="{{ $chartAreas[$index] }}" fill="url(#instructor-attendance-area)" />
                                     <polyline points="{{ $segment }}" fill="none" stroke="#2563eb"
                                         stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
                                 @endforeach
@@ -258,20 +229,22 @@
             </div>
 
             <aside class="min-w-0 space-y-3 xl:col-span-4">
-                <section class="dashboard-card rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
-                    <h2 class="text-xs font-extrabold uppercase text-[#10294b]">Next Teaching Schedule</h2>
+                <section class="dashboard-card rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+                    <div class="flex items-center gap-3">
+                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700"><x-heroicon-o-calendar-days class="h-5 w-5" /></span>
+                        <div><h2 class="text-sm font-bold text-[#10294b]">Next Teaching Schedule</h2><p class="mt-0.5 text-xs text-slate-500">Your upcoming class today</p></div>
+                    </div>
                     @if ($nextSchedule)
-                        <div class="mt-3 border-t border-slate-100 pt-3">
-                            <p class="text-sm font-extrabold text-[#10294b]">◷
-                                &nbsp;{{ Carbon\Carbon::parse($nextSchedule->start_time)->format('g:i A') }} -
-                                {{ Carbon\Carbon::parse($nextSchedule->end_time)->format('g:i A') }}</p>
-                            <p class="mt-2 text-xs font-semibold">♙
-                                &nbsp;{{ $nextSchedule->subject?->subject_name ?? 'Unnamed subject' }}</p>
-                            <p class="mt-2 text-xs text-slate-600">♧
-                                &nbsp;{{ $nextSchedule->section?->section_name ?? 'No section' }}</p>
-                            <p class="mt-2 text-xs text-slate-600">⌖ &nbsp;Room {{ $nextSchedule->room ?? 'TBD' }}</p>
-                    </div>@else<p class="mt-3 rounded-lg bg-slate-50 p-4 text-center text-xs text-slate-500">No
-                            upcoming teaching schedule today.</p>
+                        <div class="mt-5 rounded-xl bg-slate-50 p-4">
+                            <div class="flex items-center gap-2 text-blue-700"><x-heroicon-o-clock class="h-4 w-4 shrink-0" /><p class="text-sm font-bold">{{ Carbon\Carbon::parse($nextSchedule->start_time)->format('g:i A') }} &ndash; {{ Carbon\Carbon::parse($nextSchedule->end_time)->format('g:i A') }}</p></div>
+                            <p class="mt-3 break-words text-base font-bold leading-snug text-[#10294b]">{{ $nextSchedule->subject?->subject_name ?? 'Unnamed subject' }}</p>
+                            <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-slate-200 pt-3 text-xs text-slate-600">
+                                <span class="inline-flex items-center gap-1.5"><x-heroicon-o-user-group class="h-4 w-4 text-slate-400" />{{ $nextSchedule->section?->section_name ?? 'No section' }}</span>
+                                <span class="inline-flex items-center gap-1.5"><x-heroicon-o-map-pin class="h-4 w-4 text-slate-400" />Room {{ $nextSchedule->room ?? 'TBD' }}</span>
+                            </div>
+                        </div>
+                    @else
+                        <p class="mt-5 rounded-xl bg-slate-50 p-4 text-center text-sm text-slate-500">No upcoming teaching schedule today.</p>
                     @endif
                 </section>
                 {{--

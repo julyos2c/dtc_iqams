@@ -18,7 +18,7 @@ class SchoolEventResolver
     {
         return ($context?->events() ?? $this->publishedNear($at))
             ->where('attendance_mode', 'event_attendance')
-            ->filter(fn (SchoolEvent $event) => $this->targetsStudent($event, $student)
+            ->filter(fn (SchoolEvent $event) => $this->targetsStudent($event, $student, $at)
                 && $at->betweenIncluded($event->starts_at->copy()->subMinutes(config('attendance.early_scan_minutes')), $event->ends_at))
             ->sortBy(fn (SchoolEvent $event) => $event->starts_at->getTimestamp())
             ->first();
@@ -35,7 +35,7 @@ class SchoolEventResolver
             ->first();
     }
 
-    public function targetsStudent(SchoolEvent $event, Student $student): bool
+    public function targetsStudent(SchoolEvent $event, Student $student, ?CarbonInterface $at = null): bool
     {
         if ($event->target_scope === 'school') {
             return true;
@@ -43,11 +43,11 @@ class SchoolEventResolver
         $event->loadMissing('targets');
         if ($event->target_scope === 'sections') {
             return $event->targets->pluck('section_id')->filter()
-                ->contains(fn ($sectionId) => $this->eligibility->isEligibleForSection($student, (int) $sectionId));
+                ->contains(fn ($sectionId) => $this->eligibility->isEligibleForSection($student, (int) $sectionId, $at));
         }
 
         return $event->targets->whereNotNull('schedule_id')->contains(fn ($target) => $target->schedule
-            && $this->eligibility->isEligibleForSchedule($student, $target->schedule));
+            && $this->eligibility->isEligibleForSchedule($student, $target->schedule, $at));
     }
 
     public function targetsSchedule(SchoolEvent $event, Schedule $schedule): bool

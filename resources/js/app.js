@@ -4,6 +4,94 @@ import Alpine from 'alpinejs';
 import { userManagementSearch } from './user-management-search';
 
 Alpine.data('userManagementSearch', userManagementSearch);
+
+Alpine.data('existingStudentSearch', (searchUrl, addUrl) => ({
+    query: '', results: [], searched: false, loading: false, loadingMore: false, error: '', total: 0, page: 0, hasMore: false, adding: null, controller: null, sequence: 0, activeQuery: '',
+    initials(name) { return name.trim().split(/\s+/).slice(0, 2).map(part => Array.from(part)[0] || '').join('').toLocaleUpperCase(); },
+    async search() {
+        this.controller?.abort(); this.sequence++; this.results = []; this.searched = false; this.hasMore = false; this.loading = false; this.loadingMore = false; this.error = ''; this.activeQuery = this.query.trim();
+        if (!this.activeQuery) return;
+        if (this.activeQuery.length < 2) { this.error = 'Enter at least two characters.'; return; }
+        await this.fetchPage(1);
+    },
+    async loadMore() { if (!this.loadingMore && this.hasMore) await this.fetchPage(this.page + 1); },
+    async fetchPage(page) {
+        const sequence = this.sequence; const controller = new AbortController(); this.controller = controller;
+        if (page === 1) this.loading = true; else this.loadingMore = true;
+        try {
+            const url = new URL(searchUrl, window.location.origin); url.searchParams.set('q', this.activeQuery); url.searchParams.set('page', page);
+            const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal });
+            if (!response.ok) throw new Error(); const data = await response.json(); if (sequence !== this.sequence) return;
+            this.results = page === 1 ? data.students : [...this.results, ...data.students]; this.page = data.page; this.total = data.total; this.hasMore = data.has_more; this.searched = true;
+        } catch (error) { if (error.name !== 'AbortError' && sequence === this.sequence) this.error = 'Unable to search students. Please try again.'; }
+        finally { if (sequence === this.sequence) { this.loading = false; this.loadingMore = false; } }
+    },
+    async add(student) {
+        if (this.adding !== null || student.status !== 'available') return; this.adding = student.id; this.error = '';
+        const body = new FormData(); body.set('_token', this.$el.querySelector('[name=_token]').value); body.set('student_id', student.id);
+        try {
+            const response = await fetch(addUrl, { method: 'POST', body, headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+            const data = await response.json(); if (!response.ok) throw new Error(data.message || 'Unable to add student. Please try again.');
+            student.status = 'draft'; student.status_label = 'Added'; student.reason = 'Already added as draft.';
+            window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'success', message: 'Student added as draft.' } }));
+            try {
+                const refresh = await fetch(window.location.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } }); if (!refresh.ok) throw new Error();
+                const doc = new DOMParser().parseFromString(await refresh.text(), 'text/html'); const next = doc.querySelector('[data-roster-list]'); const current = document.querySelector('[data-roster-list]'); if (!next || !current) throw new Error();
+                const root = document.querySelector('[data-subject-roster]'); const state = Alpine.$data(root); state.rows = JSON.parse(next.dataset.rosterRows); state.selected = []; state.page = Math.min(state.page, state.pages);
+                Alpine.destroyTree(current); current.replaceWith(next); Alpine.initTree(next);
+                const counts = doc.querySelectorAll('[data-roster-count]'); document.querySelectorAll('[data-roster-count]').forEach((node, index) => { if (counts[index]) node.textContent = counts[index].textContent; });
+            } catch { window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'warning', message: 'Student added, but the roster could not be refreshed. Reload the page.' } })); }
+        } catch (error) { this.error = error.message || 'Unable to add student. Please try again.'; }
+        finally { this.adding = null; }
+    },
+    destroy() { this.controller?.abort(); },
+}));
+
+Alpine.data('copyStudentsDialog', (previewUrl, copyUrl) => ({
+    source: '', students: [], selected: [], search: '', loading: false, submitting: false, error: '', controller: null, sequence: 0,
+    get filtered() { const q = this.search.trim().toLocaleLowerCase(); return this.students.filter(student => (student.name + ' ' + student.number).toLocaleLowerCase().includes(q)); },
+    get allSelected() { return this.students.length > 0 && this.selected.length === this.students.length; },
+    initials(name) { return name.trim().split(/\s+/).slice(0, 2).map(part => Array.from(part)[0] || '').join('').toLocaleUpperCase(); },
+    toggleAll(checked) { this.selected = checked ? this.students.map(student => student.key) : []; },
+    async load() {
+        this.controller?.abort(); const sequence = ++this.sequence;
+        this.students = []; this.selected = []; this.search = ''; this.error = '';
+        if (!this.source) { this.loading = false; return; }
+        const controller = new AbortController(); this.controller = controller; this.loading = true;
+        try {
+            const url = new URL(previewUrl, window.location.origin); url.searchParams.set('copy_from', this.source);
+            const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal });
+            if (!response.ok) throw new Error();
+            const data = await response.json(); if (sequence === this.sequence) this.students = data.students;
+        } catch (error) { if (error.name !== 'AbortError' && sequence === this.sequence) this.error = 'Unable to load students. Please try again.'; }
+        finally { if (sequence === this.sequence) this.loading = false; }
+    },
+    async submit(form) {
+        if (this.submitting || !this.selected.length) return;
+        this.submitting = true; this.error = '';
+        const body = new FormData(); body.set('_token', form.querySelector('[name=_token]').value); body.set('copy_from', this.source);
+        this.selected.forEach(key => body.append('students[]', key));
+        try {
+            const response = await fetch(copyUrl, { method: 'POST', body, headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+            const data = await response.json();
+            if (!response.ok) throw new Error(Object.values(data.errors || {}).flat()[0] || data.message || 'Unable to copy students. Please try again.');
+            const message = data.count + ' students added as drafts.' + (data.skipped ? ' ' + data.skipped + ' no longer eligible and skipped.' : '');
+            this.$el.closest('dialog').close();
+            const updated = await fetch(window.location.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            if (!updated.ok) throw new Error('Students were copied, but the roster could not be refreshed. Reload the page.');
+            const html = await updated.text(); const next = new DOMParser().parseFromString(html, 'text/html').querySelector('[data-subject-roster]');
+            const current = document.querySelector('[data-subject-roster]');
+            if (!next || !current) throw new Error('Students were copied, but the roster could not be refreshed. Reload the page.');
+            Alpine.destroyTree(current); current.replaceWith(next); Alpine.initTree(next);
+            window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'success', message } }));
+        } catch (error) {
+            this.error = error.message || 'Unable to copy students. Please try again.';
+            if (!this.$el.closest('dialog').open) window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'error', message: this.error } }));
+        } finally { this.submitting = false; }
+    },
+    destroy() { this.controller?.abort(); },
+}));
+
 Alpine.data('attendanceLookupSearch', ({ endpoint, selected, model = 'createUserId', label = 'people' }) => ({
     lookupValue: '', search: '', options: [], open: false, loading: false, searched: false, error: '', timer: null, controller: null, sequence: 0,
     init() { if (selected) this.load(selected); },
@@ -395,6 +483,14 @@ Alpine.data('instructorWorkspace', () => ({
                 if (milestone) {
                     const icon = milestone.querySelector('[data-instructor-milestone-icon]');
                     const label = milestone.querySelector('[data-instructor-milestone-label]');
+                    const punctuality = milestone.querySelector('[data-instructor-milestone-punctuality]');
+                    if (punctuality) {
+                        punctuality.textContent = event?.punctuality ?? 'Not yet recorded';
+                        const isLateOrEarly = ['Late', 'Early Out'].includes(event?.punctuality);
+                        punctuality.classList.toggle('text-rose-600', Boolean(event) && isLateOrEarly);
+                        punctuality.classList.toggle('text-emerald-700', Boolean(event) && !isLateOrEarly);
+                        punctuality.classList.toggle('text-gray-500', !event);
+                    }
                     icon.textContent = event ? '✓' : '○';
                     icon.classList.toggle('bg-emerald-500', Boolean(event));
                     icon.classList.toggle('text-white', Boolean(event));
@@ -402,7 +498,6 @@ Alpine.data('instructorWorkspace', () => ({
                     icon.classList.toggle('text-gray-500', !event);
                     label.classList.toggle('text-emerald-700', Boolean(event));
                     label.classList.toggle('text-gray-600', !event);
-                    milestone.classList.toggle('bg-emerald-50', day.next_period === key);
                 }
             });
 
@@ -532,6 +627,12 @@ Alpine.data('staffWorkspace', () => ({
             const milestone = root.querySelector(`[data-staff-milestone="${period}"]`);
             const icon = milestone.querySelector('[data-staff-milestone-icon]');
             const label = milestone.querySelector('[data-staff-milestone-label]');
+            const punctuality = milestone.querySelector('[data-staff-milestone-punctuality]');
+            punctuality.textContent = event?.punctuality ?? '';
+            const isLateOrEarly = ['Late', 'Early Out'].includes(event?.punctuality);
+            punctuality.classList.toggle('text-rose-600', Boolean(event) && isLateOrEarly);
+            punctuality.classList.toggle('text-emerald-700', Boolean(event) && !isLateOrEarly);
+            punctuality.classList.toggle('text-gray-500', !event);
             icon.textContent = event ? '✓' : '○';
             icon.classList.toggle('bg-emerald-500', Boolean(event));
             icon.classList.toggle('text-white', Boolean(event));
@@ -539,7 +640,6 @@ Alpine.data('staffWorkspace', () => ({
             icon.classList.toggle('text-gray-500', !event);
             label.classList.toggle('text-emerald-700', Boolean(event));
             label.classList.toggle('text-gray-600', !event);
-            milestone.classList.toggle('bg-emerald-50', data.today.next_period === period);
         });
         Object.entries(data.totals).forEach(([key, value]) => {
             const element = root.querySelector(`[data-staff-stat="${key}"]`);
@@ -733,8 +833,11 @@ Alpine.data('attendanceOverview', (series) => ({
         });
     },
     get points() {
-        return (this.series[this.period] || []).filter((point) => Number.isFinite(Number(point.percentage)));
+        return (this.series[this.period] || []).filter((point) => Number(point.scheduled) > 0 && Number.isFinite(Number(point.percentage)));
     },
+    get attended() { return this.points.reduce((sum, point) => sum + Number(point.attended), 0); },
+    get scheduled() { return this.points.reduce((sum, point) => sum + Number(point.scheduled), 0); },
+    get periodRate() { return this.scheduled ? this.format(this.attended / this.scheduled * 100) : '—'; },
     x(index) {
         return this.points.length > 1 ? 58 + (index * 672 / (this.points.length - 1)) : 394;
     },
@@ -754,65 +857,33 @@ Alpine.data('attendanceOverview', (series) => ({
     target: 75,
 }));
 
-Alpine.data('studentQr', () => ({
-    downloadingIdCard: false,
+Alpine.data('studentProfileQr', () => ({
+    ready: false,
+    message: 'Loading QR code…',
     qrCode: null,
-
-    init() {
-        window.ensureIqamsQrCode().then(() => this.renderQrCode()).catch(() => {});
-        this.loadQrCode();
-    },
-
-    destroy() {
-    },
-
-    renderQrCode() {
-        const target = this.$root.querySelector('#student-qr');
-        const value = this.qrCode;
-        if (!target) return;
-        if (!value) {
-            target.textContent = 'No QR code assigned';
-            return;
-        }
-        if (!window.QRCode) return;
-
-        target.replaceChildren();
-        new window.QRCode(target, {
-            text: value,
-            width: 224,
-            height: 224,
-            colorDark: '#093f3d',
-        });
-    },
-
-    async loadQrCode() {
-        const endpoint = this.$root.dataset.idCardUrl;
-        if (!endpoint) return;
-
+    async init() {
         try {
-            const response = await fetch(endpoint, {
-                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                credentials: 'same-origin',
-                cache: 'no-store',
-            });
-            if (!response.ok) return;
-            this.qrCode = (await response.json()).qr_code || null;
-            this.renderQrCode();
+            const response = await fetch(this.$root.dataset.qrUrl, { headers: { Accept: 'application/json' }, credentials: 'same-origin', cache: 'no-store' });
+            if (!response.ok) throw new Error('No active QR code assigned');
+            this.qrCode = (await response.json()).qr_code;
+            const { default: QRCode } = await import('qrcode');
+            await QRCode.toCanvas(this.$refs.qr, this.qrCode, { width: 640, margin: 4, errorCorrectionLevel: 'M', color: { dark: '#000000', light: '#ffffff' } });
+            this.ready = true;
         } catch {
-            // Keep the placeholder when the private ID-card endpoint is unavailable.
+            this.message = 'No active QR code available. Contact the administrator.';
         }
     },
-
-    async downloadIdCard() {
-        if (this.downloadingIdCard) return;
-        this.downloadingIdCard = true;
+    async download() {
         try {
-            await window.ensureIqamsQrCode();
-            await window.downloadIqamsIdCard(this.$root.dataset.idCardUrl);
-        } catch (error) {
-            window.alert(error.message || 'The ID card could not be downloaded.');
-        } finally {
-            this.downloadingIdCard = false;
+            const response = await fetch(this.$root.dataset.qrUrl, { headers: { Accept: 'application/json' }, credentials: 'same-origin', cache: 'no-store' });
+            if (!response.ok || (await response.json()).qr_code !== this.qrCode) throw new Error();
+            const link = document.createElement('a');
+            link.download = `IQAMS-QR-${(this.$root.dataset.studentNumber || 'student').replace(/[^a-z0-9_-]/gi, '-')}.png`;
+            link.href = this.$refs.qr.toDataURL('image/png');
+            link.click();
+        } catch {
+            this.ready = false;
+            this.message = 'QR code is no longer available. Refresh or contact the administrator.';
         }
     },
 }));
@@ -976,9 +1047,20 @@ const pageLoader = (() => {
     overlay.className = 'global-page-loader';
     overlay.setAttribute('aria-hidden', 'true');
     overlay.innerHTML = `
-        <div class="global-page-loader__indicator" role="status" aria-live="polite">
-            <span class="global-page-loader__spinner" aria-hidden="true"></span>
-            <span class="global-page-loader__label">Loading…</span>
+        <div class="global-page-loader__content" role="status" aria-live="polite">
+            <span class="global-page-loader__sr-only">Loading page…</span>
+            <aside class="global-page-loader__sidebar" aria-hidden="true">
+                <div class="global-page-loader__sidebar-brand"></div>
+                <div></div><div></div><div></div><div></div><div></div><div></div>
+            </aside>
+            <div class="global-page-loader__page">
+            <header class="global-page-loader__header" aria-hidden="true"><div></div><div></div></header>
+            <div class="global-page-loader__body" aria-hidden="true">
+            <div class="global-page-loader__line global-page-loader__heading"></div>
+            <div class="global-page-loader__line global-page-loader__subtitle"></div>
+            <div class="global-page-loader__cards"><div></div><div></div><div></div></div>
+            <div class="global-page-loader__panel"><div></div><div></div><div></div><div></div></div>
+            </div></div>
         </div>
     `;
     document.body.append(overlay);
@@ -1238,6 +1320,20 @@ document.addEventListener('submit', (event) => {
         return;
     }
 
-    setFormSubmitLoading(form);
+    const button = event.submitter || form.querySelector('button:not([type]), button[type="submit"], input[type="submit"]');
+    window.setTimeout(() => {
+        if (!event.defaultPrevented && button && button.tagName === 'BUTTON') {
+            setFormSubmitLoading({ querySelector: () => button });
+        }
+    }, 0);
+});
+
+window.addEventListener('pageshow', (event) => {
+    if (!event.persisted) return;
+    document.querySelectorAll('button.crud-submit-loading').forEach((button) => {
+        button.disabled = false;
+        button.classList.remove('crud-submit-loading');
+        button.removeAttribute('aria-busy');
+    });
 });
 

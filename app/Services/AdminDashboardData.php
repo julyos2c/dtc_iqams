@@ -114,6 +114,7 @@ class AdminDashboardData
                 'stats' => $stats,
                 'charts' => [
                     'hourly' => $this->hourly($today, $tomorrow),
+                    'late_hourly' => $this->lateHourly($today, $tomorrow),
                     'departments' => $this->departments($today, $tomorrow),
                     'weekly' => $this->weekly($weekStart, $generatedAt->copy()->endOfDay()),
                 ],
@@ -220,7 +221,9 @@ class AdminDashboardData
     private function lateCount(Carbon $from, Carbon $to): int
     {
         return DB::table('attendance_logs')->where('scan_time', '>=', $from)->where('scan_time', '<', $to)
-            ->where('record_state', 'canonical')->where('status', 'late')->count();
+            ->where(function ($query): void {
+                $query->where('record_state', 'canonical')->orWhereNull('record_state');
+            })->where('status', 'late')->distinct()->count('user_id');
     }
 
     private function personnelRows(Carbon $from, Carbon $to): Collection
@@ -293,7 +296,7 @@ class AdminDashboardData
 
     private function absentUserCount(Carbon $date, Carbon $at): int
     {
-        $studentAbsent = AttendanceLog::canonical()
+        $studentAbsentQuery = AttendanceLog::canonical()
             ->where('scan_time', '>=', $date->copy()->startOfDay())
             ->where('scan_time', '<', $date->copy()->addDay()->startOfDay())
             ->where('status', 'absent')
@@ -304,8 +307,15 @@ class AdminDashboardData
                 ->where('status', 'active')
                 ->whereHas('student', fn ($student) => $student->where('status', 'active')))
             ->with(['schedule:id,section_id,day,start_time,end_time,archived_at', 'schoolEvent:id,attendance_mode,starts_at,ends_at'])
-            ->select(['id', 'user_id', 'schedule_id', 'school_event_id', 'attendance_type', 'scan_time', 'status'])
-            ->get()
+            ->select(['id', 'user_id', 'schedule_id', 'school_event_id', 'attendance_type', 'scan_time', 'status']);
+        $studentAbsent = ClassCancellationReportFilter::exclude($studentAbsentQuery)
+            ->whereNotExists(function ($query): void {
+                $query->selectRaw('1')->from('class_cancellation_requests as pending_cancellation')
+                    ->where('pending_cancellation.status', 'pending')
+                    ->whereColumn('pending_cancellation.schedule_id', 'attendance_logs.schedule_id')
+                    ->whereColumn('pending_cancellation.opens_at', '<=', 'attendance_logs.scan_time')
+                    ->whereColumn('pending_cancellation.ends_at', '>=', 'attendance_logs.scan_time');
+            })->get()
             ->filter(fn (AttendanceLog $log): bool => $this->studentAbsenceCutoffPassed($log, $at))
             ->pluck('user_id')
             ->unique()
@@ -412,6 +422,22 @@ class AdminDashboardData
             ->selectRaw("{$expression} as bucket, COUNT(*) as aggregate")->groupBy('bucket')->pluck('aggregate', 'bucket');
 
         return collect(range(6, 20))->map(fn ($hour) => [
+            'label' => Carbon::createFromTime($hour)->format('g A'), 'value' => (int) ($counts->get($hour) ?? 0),
+        ])->all();
+    }
+
+    private function lateHourly(Carbon $from, Carbon $to): array
+    {
+        $expression = DB::getDriverName() === 'sqlite'
+            ? "CAST(strftime('%H', scan_time) AS INTEGER)"
+            : 'HOUR(scan_time)';
+        $counts = DB::table('attendance_logs')->where('scan_time', '>=', $from)->where('scan_time', '<', $to)
+            ->where(function ($query): void {
+                $query->where('record_state', 'canonical')->orWhereNull('record_state');
+            })->where('status', 'late')
+            ->selectRaw("{$expression} as bucket, COUNT(*) as aggregate")->groupBy('bucket')->pluck('aggregate', 'bucket');
+
+        return collect(range(0, 23))->map(fn ($hour) => [
             'label' => Carbon::createFromTime($hour)->format('g A'), 'value' => (int) ($counts->get($hour) ?? 0),
         ])->all();
     }

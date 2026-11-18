@@ -106,6 +106,47 @@ php artisan roles:reconcile
 
 Stop the rollout if it reports a missing, multiple, or mismatched role.
 
+### Audit privacy and retention deployment checklist
+
+Repository changes: `/privacy-notice` is a public, clearly marked draft; it is
+not an approved notice. `audit:retention --dry-run` is a read-only age-based
+estimate. It requires a positive `AUDIT_RETENTION_DAYS` value, uses an exclusive
+cutoff in the application timezone, and does not evaluate holds. Verify the
+application and database session timezone and historical timestamp conventions
+before relying on estimates. `AUDIT_RETENTION_ENABLED`
+defaults to false; even if set true, deletion is not implemented or enabled.
+The command is not scheduled. Estimates are not disposal eligibility.
+
+Institutional decisions before any disposal: approve the notice and privacy
+contact and request process; approve retention duration and backup disposal;
+define the hold owner, authorization, scope, creation and release process,
+investigation preservation, and any legal requirements. No hold data model or
+release workflow is currently implemented. Until hold enforcement exists and
+is reviewed, no age-based record is authorized for deletion. A future cleanup
+must use bounded batches, an atomic shared lock, independently authorized
+maintenance credentials, reviewed audit outcomes, and tested hold exclusions.
+
+Hosting administrator actions:
+
+- Verify the runtime account's effective audit-table privileges and the
+  separate maintenance identity described in `docs/audit-database-protection.md`.
+- Identify actual proxy addresses, forwarding headers and origin-access
+  restrictions. `AuditLogger` uses Laravel's request IP. The application does
+  not configure proxy trust; Laravel has environment-specific automatic
+  defaults. Test the deployed framework and ingress before changing settings.
+  If configuration is needed, use Laravel `trustProxies` with verified proxy
+  addresses and only required headers; do not use blanket trust. Direct origin
+  access and header stripping must be checked at the hosting layer.
+- Protect backups and test restoration and disposal against the approved
+  schedule. Retain held evidence in accordance with approved procedures.
+- Keep audit cleanup unscheduled and disabled. Verify scheduler jobs, normal
+  audit creation and access, QR and attendance activity, and security tests on
+  staging. Do not change production credentials or proxy settings as part of
+  this code deployment.
+- Follow the migration, rollback and recovery procedure in
+  `docs/audit-database-protection.md`; never use destructive migration rollback
+  against production audit history.
+
 ### Data policy baseline
 
 Record these approved rules before enabling production administration:
@@ -114,6 +155,11 @@ Record these approved rules before enabling production administration:
 - User accounts are deactivated rather than hard-deleted.
 - Attendance and leave history are preserved until an institutional retention
   period is formally approved.
+- Scan audits include IP addresses and other potentially identifying security
+  information. Limit access to authorized personnel, cover collection and its
+  security purpose in the institutional privacy notice, and protect exports and
+  backups. An institutional retention period and disposal procedure for scan
+  audits have not yet been specified; see `docs/database-integrity.md`.
 - USB/Bluetooth plug-and-play QR scanners are the approved attendance capture
   hardware; webcam and mobile-camera scanning are not part of the IQAMS
   deployment contract.

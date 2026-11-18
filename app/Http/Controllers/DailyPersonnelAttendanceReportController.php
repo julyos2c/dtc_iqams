@@ -18,8 +18,10 @@ class DailyPersonnelAttendanceReportController extends Controller
     {
         [$date, $filters] = $this->filters->validate($request);
 
-        $report = $this->reports->getDailyReport($date, $filters);
+        $monthly = $request->input('period') === 'monthly';
+        $report = $monthly ? $this->reports->getMonthlyReport($date, $filters) : $this->reports->getDailyReport($date, $filters);
+        $report['monthly'] = $monthly;
 
-        return view('reports.daily-personnel.index', $report + $this->reports->filterOptions($filters === [] ? $report['rows'] : null));
+        return view('reports.daily-personnel.index', $report + $this->reports->filterOptions(! $monthly && $filters === [] ? $report['rows'] : null));
     }
 }

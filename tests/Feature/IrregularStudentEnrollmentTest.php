@@ -62,6 +62,65 @@ class IrregularStudentEnrollmentTest extends TestCase
         $this->assertFalse(app(SchoolEventResolver::class)->targetsStudent($event, $student));
     }
 
+    public function test_sync_retains_existing_enrollment_identity_and_timestamp(): void
+    {
+        [$student, $selected] = $this->context();
+        $before = $student->scheduleEnrollments()->first();
+        app(StudentScheduleEligibility::class)->sync($student, [$selected->recurring_schedule_group_id]);
+        $after = $student->scheduleEnrollments()->first();
+        $this->assertSame($before->id, $after->id);
+        $this->assertTrue($before->created_at->equalTo($after->created_at));
+    }
+
+    public function test_profile_edit_without_enrollment_selection_preserves_membership(): void
+    {
+        [$student] = $this->context();
+        $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+        $admin = User::factory()->create(['role_id' => Role::findByName('admin')->id]);
+        $enrollment = $student->scheduleEnrollments()->first();
+        $this->actingAs($admin)->withSession(['auth.password_confirmed_at' => time()])
+            ->put(route('students.update', $student), [
+                'course_id' => $student->course_id, 'section_id' => $student->section_id,
+                'enrollment_type' => 'irregular', 'first_name' => 'Updated',
+                'last_name' => $student->last_name, 'status' => 'active',
+            ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame('Updated', $student->fresh()->first_name);
+        $this->assertDatabaseHas('student_schedule_enrollments', ['id' => $enrollment->id]);
+    }
+
+    public function test_schedule_event_absence_roster_matches_live_targeting(): void
+    {
+        [$student, $selected, $unselected] = $this->context();
+        $event = SchoolEvent::create([
+            'title' => 'Targeted meeting', 'starts_at' => '2026-09-07 08:00:00', 'ends_at' => '2026-09-07 09:00:00',
+            'attendance_mode' => 'event_attendance', 'target_scope' => 'schedules', 'status' => 'published', 'published_at' => now(),
+        ]);
+        $event->targets()->create(['schedule_id' => $unselected->id]);
+        $regular = Student::create([
+            'user_id' => User::factory()->create()->id, 'student_no' => 'REG-EVENT',
+            'first_name' => 'Regular', 'last_name' => 'Student', 'course_id' => $student->course_id,
+            'section_id' => $selected->section_id, 'status' => 'active',
+        ]);
+        // Same section but a different explicit offering: this irregular student must be excluded.
+        $unselected->update(['section_id' => $selected->section_id]);
+        $event->load('targets.schedule');
+        $service = app(\App\Services\SchoolEventAttendanceService::class);
+        $this->assertFalse(app(SchoolEventResolver::class)->targetsStudent($event, $student));
+        $this->assertFalse($service->studentsFor($event)->whereKey($student->id)->exists());
+        $this->assertTrue($service->studentsFor($event)->whereKey($regular->id)->exists());
+    }
+
+    public function test_direct_enrollment_changes_invalidate_student_cache(): void
+    {
+        [$student, $selected] = $this->context();
+        $cache = app(\App\Services\AttendanceSummaryCache::class);
+        $cache->rememberStudent($student->user_id, fn () => ['marker' => 'old']);
+        $student->scheduleEnrollments()->first()->delete();
+        $this->assertSame(['marker' => 'new'], $cache->rememberStudent($student->user_id, fn () => ['marker' => 'new']));
+        $student->scheduleEnrollments()->create(['recurring_schedule_group_id' => $selected->recurring_schedule_group_id]);
+        $this->assertSame(['marker' => 'created'], $cache->rememberStudent($student->user_id, fn () => ['marker' => 'created']));
+    }
+
     private function context(): array
     {
         $studentRole = Role::firstOrCreate(['role_name' => 'student']);

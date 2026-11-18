@@ -26,5 +26,6 @@
 <body {{ $attributes->class($bodyClass) }} x-data="{{ $alpineData }}">
     {{ $slot }}
     <x-logout-confirmation />
+    <x-service-worker />
 </body>
 </html>

@@ -53,20 +53,7 @@
                 <template x-if="result.person">
                     <div class="grid min-h-[100dvh] grid-cols-1 lg:h-[100dvh] lg:grid-cols-12 lg:overflow-hidden">
                         <div
-                            class="col-span-1 flex min-h-0 min-w-0 flex-col bg-[#eef3f7] p-3 sm:p-5 lg:col-span-7 lg:p-8">
-                            <header class="mb-4 flex flex-wrap items-center justify-between gap-3 sm:mb-5">
-                                <div class="flex min-w-0 items-center gap-2 sm:gap-3"><img src="{{ asset('favicon.svg') }}"
-                                        alt="IQAMS" class="h-9 w-9 shrink-0 sm:h-12 sm:w-12">
-                                    <div class="min-w-0">
-                                        <p class="text-lg font-extrabold tracking-[.12em] text-[#123f70] sm:text-xl">IQAMS
-                                        </p>
-                                        <p class="truncate text-[10px] text-slate-500 sm:text-xs">Integrated QR Attendance
-                                            Monitoring System</p>
-                                    </div>
-                                </div>
-                                <p class="text-right text-[10px] font-medium text-slate-500 sm:text-xs">
-                                    {{ $terminal->name }}<br>{{ $terminal->location }}</p>
-                            </header>
+                            class="col-span-1 flex min-h-0 min-w-0 flex-col bg-[#eef3f7] p-3 sm:p-5 lg:col-span-8 lg:p-8">
                             <div
                                 class="h-[clamp(13rem,36vh,24rem)] overflow-hidden rounded-xl bg-slate-200 shadow-sm sm:h-[clamp(16rem,42vh,30rem)] lg:min-h-0 lg:flex-1 lg:h-auto">
                                 <img x-show="result.person.avatar" :src="result.person.avatar"
@@ -78,35 +65,34 @@
                         </div>
 
                         <div
-                            class="col-span-1 flex min-h-0 min-w-0 flex-col px-4 py-5 sm:px-8 sm:py-7 lg:col-span-5 lg:overflow-y-auto lg:px-12 lg:py-10">
+                            class="col-span-1 flex min-h-0 min-w-0 flex-col px-4 py-5 sm:px-8 sm:py-7 lg:col-span-4 lg:overflow-y-auto lg:px-8 lg:py-10">
                             <div class="flex items-center justify-between gap-3 border-b border-slate-200 pb-4 sm:pb-5">
                                 <p class="text-[10px] font-bold uppercase tracking-[.2em] text-slate-400 sm:text-xs">
                                     Verified identity</p><span
                                     class="shrink-0 rounded-md bg-[#e8f0f7] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#124f87] sm:px-4 sm:py-2 sm:text-sm"
                                     x-text="result.person.role"></span>
                             </div>
-                            <div class="flex flex-col justify-center py-6 lg:flex-1">
-                                <h1 class="break-words text-2xl font-extrabold leading-tight text-[#102f4f] sm:text-4xl lg:text-5xl"
+                            <div class="flex flex-col justify-center py-4 lg:flex-1">
+                                <h1 class="break-words text-xl font-extrabold leading-tight text-[#102f4f] sm:text-2xl lg:text-3xl"
                                     x-text="result.person.name"></h1>
-                                <p class="mt-2 text-lg font-medium text-slate-500 sm:mt-3 sm:text-xl"
-                                    x-text="result.person.role"></p>
-                                <dl class="mt-7 space-y-4 border-y border-slate-200 py-5 sm:mt-9 sm:py-6"><template
+                                <dl class="mt-4 space-y-2 border-y border-slate-200 py-4"><template
                                         x-for="detail in result.person.details" :key="detail.label">
                                         <div
                                             class="grid grid-cols-1 gap-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:items-baseline sm:gap-4">
                                             <dt class="text-xs font-bold uppercase tracking-wide text-[#1b5b91] sm:text-sm"
                                                 x-text="detail.label"></dt>
-                                            <dd class="break-words text-base font-semibold leading-snug text-slate-800 sm:text-lg"
+                                            <dd class="break-words text-sm font-semibold leading-snug text-slate-800 sm:text-base"
                                                 x-text="detail.value"></dd>
                                         </div>
                                     </template></dl>
-                                <div class="mt-6 border-l-4 pl-4 sm:mt-8 sm:pl-5"
+                                <div class="mt-4 border-l-4 pl-4 sm:mt-5"
                                     :class="result.code === 'recorded' ? 'border-emerald-600' : (result
                                         .code === 'already_recorded' ? 'border-amber-500' : 'border-red-600')">
                                     <p class="text-xs font-bold uppercase tracking-[.18em] sm:text-sm"
                                         :class="resultClass"
-                                        x-text="result.code === 'recorded' ? 'Scan Successful' : result.title"></p>
-                                    <p class="mt-1 text-xl font-bold sm:text-2xl" x-text="result.title"></p>
+                                        x-show="result.code === 'recorded'"
+                                        x-text="'Scan Successful'"></p>
+                                    <p class="mt-1 text-lg font-bold sm:text-xl" x-text="result.title"></p>
                                     <p class="mt-2 text-sm leading-relaxed text-slate-500" x-text="result.message"></p>
                                 </div>
                                 <template x-if="result.attendance">
@@ -128,8 +114,7 @@
                                     </div>
                                 </template>
                             </div>
-                            <p class="border-t border-slate-200 pt-4 text-center text-xs text-slate-400">Ready for the next
-                                scan in a moment</p>
+                            <p class="border-t border-slate-200 pt-4 text-center text-xs text-slate-400">Ready for the next scan</p>
                         </div>
                     </div>
                 </template>
@@ -155,7 +140,6 @@
                     qr: '',
                     state: 'ready',
                     busy: false,
-                    resetTimer: null,
                     result: {
                         code: '',
                         title: '',
@@ -182,7 +166,7 @@
                     async scan() {
                         const value = this.qr.trim();
                         this.qr = '';
-                        if (!value || this.busy || this.state !== 'ready') return;
+                        if (!value || this.busy) return;
                         this.busy = true;
                         this.state = 'processing';
                         try {
@@ -218,21 +202,7 @@
                     showResult(result) {
                         this.result = result;
                         this.state = 'result';
-                        clearTimeout(this.resetTimer);
-                        this.resetTimer = setTimeout(() => this.reset(), 800);
-                    },
-                    reset() {
-                        clearTimeout(this.resetTimer);
-                        this.qr = '';
-                        this.result = {
-                            code: '',
-                            title: '',
-                            message: '',
-                            person: null,
-                            attendance: null
-                        };
                         this.busy = false;
-                        this.state = 'ready';
                         this.focus();
                     },
                 };

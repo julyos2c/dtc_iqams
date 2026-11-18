@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\SchoolEvent;
+use App\Models\Schedule;
 use App\Models\Student;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -46,16 +47,27 @@ class SchoolEventAttendanceService
     {
         if ($event->target_scope === 'school') {
             return Student::query()->where('students.status', 'active')
-                ->whereHas('user', fn ($q) => $q->where('status', 'active'));
+                ->whereHas('user', fn ($q) => $q->where('status', 'active'))
+                ->when(app(EnrollmentWorkflow::class)->enabled(), fn ($query) => $query->where('students.created_at', '<=', $event->starts_at));
         }
 
-        $sections = $event->target_scope === 'sections'
-            ? $event->targets->pluck('section_id')->filter()->map(fn ($id) => (int) $id)->all()
-            : $event->targets->pluck('schedule.section_id')->filter()->unique()->map(fn ($id) => (int) $id)->all();
-        $groups = $event->target_scope === 'sections'
-            ? \App\Models\Schedule::active()->whereIn('section_id', $sections)->pluck('recurring_schedule_group_id')->all()
-            : $event->targets->pluck('schedule.recurring_schedule_group_id')->filter()->unique()->all();
+        if ($event->target_scope === 'schedules') {
+            $scheduleIds = $event->targets->pluck('schedule_id')->filter()->all();
 
-        return $this->eligibility->studentsForTargets($sections, $groups);
+            return Student::query()->where('students.status', 'active')
+                ->whereHas('user', fn ($query) => $query->where('status', 'active'))
+                ->where(function ($query) use ($scheduleIds, $event): void {
+                    foreach (Schedule::whereIn('id', $scheduleIds)->get() as $schedule) {
+                        $query->orWhereIn('students.id', $this->eligibility->studentsForSchedule($schedule, $event->starts_at)->select('students.id'));
+                    }
+                    // An empty target list must never select every student.
+                    $query->orWhereRaw('1 = 0');
+                });
+        }
+
+        $sections = $event->targets->pluck('section_id')->filter()->map(fn ($id) => (int) $id)->all();
+        $groups = Schedule::active()->whereIn('section_id', $sections)->pluck('recurring_schedule_group_id')->all();
+
+        return $this->eligibility->studentsForTargets($sections, $groups, $event->starts_at);
     }
 }

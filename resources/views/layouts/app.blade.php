@@ -67,5 +67,6 @@
     <x-password-confirmation-modal />
     <x-logout-confirmation />
     @stack('scripts')
+    <x-service-worker />
 </body>
 </html>

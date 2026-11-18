@@ -19,7 +19,7 @@ class StudentAbsenceWarningService
      */
     public function forStudent(Student $student): Collection
     {
-        return AttendanceLog::canonical()
+        $query = AttendanceLog::canonical()
             ->join('schedules', 'attendance_logs.schedule_id', '=', 'schedules.id')
             ->join('subjects', 'schedules.subject_id', '=', 'subjects.id')
             ->where('attendance_logs.user_id', $student->user_id)
@@ -27,10 +27,12 @@ class StudentAbsenceWarningService
             ->where('attendance_logs.attendance_type', 'time_in')
             ->where('attendance_logs.status', 'absent')
             ->groupBy('subjects.id', 'subjects.subject_code', 'subjects.subject_name')
+            ->when(app(EnrollmentWorkflow::class)->enabled(), fn ($query) => $query->groupBy('schedules.recurring_schedule_group_id'))
             ->havingRaw('COUNT(attendance_logs.id) >= ?', [self::THRESHOLD])
             ->orderByDesc('absence_count')
             ->orderBy('subjects.subject_code')
-            ->get([
+            ;
+        return ClassCancellationReportFilter::exclude($query)->get([
                 'subjects.id as subject_id',
                 'subjects.subject_code',
                 'subjects.subject_name',

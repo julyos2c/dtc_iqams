@@ -6,6 +6,7 @@ use App\Models\Schedule;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use App\ValueObjects\ScheduleOccurrence;
 
 class StudentAbsenceService
 {
@@ -41,10 +42,20 @@ class StudentAbsenceService
         foreach ($occurrences as $occurrence) {
             $event = $this->events->affectingOccurrence($occurrence, $eventContext);
 
-            $created += DB::transaction(fn () => $this->writer->forSchedule($occurrence, $event));
+            $created += DB::transaction(function () use ($occurrence, $event) {
+                Schedule::whereKey($occurrence->schedule->id)->lockForUpdate()->firstOrFail();
+                if (app(ClassCancellationService::class)->status($occurrence)) return 0;
+                return $this->writer->forSchedule($occurrence, $event);
+            });
         }
 
         return $created;
+    }
+
+    public function markOccurrenceDue(ScheduleOccurrence $occurrence, Carbon $at): int
+    {
+        if ($at->lessThanOrEqualTo($occurrence->presentUntil) || app(ClassCancellationService::class)->status($occurrence)) return 0;
+        return $this->writer->forSchedule($occurrence, $this->events->affectingOccurrence($occurrence));
     }
 
     private function eventContext(Carbon $at, Collection $occurrences): ?SchoolEventContext

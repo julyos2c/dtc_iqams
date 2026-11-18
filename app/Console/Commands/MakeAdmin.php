@@ -68,6 +68,7 @@ class MakeAdmin extends Command
             return self::FAILURE;
         }
 
+        $adminExisted = Role::where('name', 'admin')->where('guard_name', 'web')->exists();
         $adminRole = Role::firstOrCreate(
             ['name' => 'admin', 'guard_name' => 'web'],
             ['role_name' => 'admin'],
@@ -75,7 +76,10 @@ class MakeAdmin extends Command
         $permissions = collect(self::ADMIN_PERMISSIONS)->map(
             fn (string $name) => Permission::firstOrCreate(['name' => $name, 'guard_name' => 'web']),
         );
-        $adminRole->syncPermissions($permissions);
+        if ($adminExisted && ! $adminRole->hasPermissionTo('view-audit-logs')) {
+            $permissions = $permissions->reject(fn ($permission) => $permission->name === 'view-audit-logs');
+        }
+        $adminRole->givePermissionTo($permissions);
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         $user = User::create([

@@ -125,17 +125,14 @@ class AttendanceScannerController extends Controller
             'student' => [
                 ['label' => 'Department', 'value' => $department?->department_name ?? $department?->department_code ?? 'Not assigned'],
                 ['label' => 'Course', 'value' => $user->student?->course?->course_name ?? 'Not assigned'],
-                ['label' => 'Year Level', 'value' => $this->yearLevel($user->student?->year_level)],
             ],
             'instructor' => [
                 ['label' => 'Department', 'value' => $department?->department_name ?? $department?->department_code ?? 'Not assigned'],
                 ['label' => 'Employee ID', 'value' => $user->instructor?->employee_no ?? 'Not assigned'],
-                ['label' => 'Position', 'value' => 'Instructor'],
             ],
             default => [
                 ['label' => 'Office/Unit', 'value' => $officeUnit?->name ?? 'Not assigned'],
                 ['label' => 'Employee ID', 'value' => $user->nonTeachingStaff?->employee_no ?? 'Not assigned'],
-                ['label' => 'Position', 'value' => 'Non-Teaching Staff'],
             ],
         };
 

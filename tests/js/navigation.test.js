@@ -5,7 +5,7 @@ import { installNavigationFeedback } from '../../resources/js/navigation.js';
 function setup() {
     const win = new EventTarget();
     win.location = { href: 'http://localhost/instructor/dashboard' };
-    win.HTMLFormElement = class { target = ''; checkValidity() { return true; } };
+    win.HTMLFormElement = class { target = ''; checkValidity() { return true; } matches() { return false; } };
     const doc = new EventTarget();
     const counts = { starts: 0, stops: 0, navigating: 0 };
     win.addEventListener('iqams:navigating', () => counts.navigating++);
@@ -37,6 +37,20 @@ test('sidebar clicks leave the destination and history under native browser cont
     assert.equal(counts.starts, 2, 'Back/forward must not start a competing async navigation');
 });
 
+test('login and confirmed logout use button feedback without a page loader', async () => {
+    const { win, doc, counts } = setup();
+    for (const attribute of ['data-login-form', 'data-logout-confirmed']) {
+        const form = new win.HTMLFormElement();
+        form.matches = selector => selector.includes(attribute);
+        const event = new Event('submit', { cancelable: true });
+        Object.defineProperty(event, 'target', { value: form });
+        doc.dispatchEvent(event);
+    }
+    await Promise.resolve();
+    assert.equal(counts.starts, 0);
+    assert.equal(counts.navigating, 2);
+});
+
 test('downloads, new tabs, modified clicks, hashes and cancelled actions show no loader', () => {
     const { click, counts } = setup();
     click('/export', { link: { hasAttribute: () => true } });
@@ -57,7 +71,7 @@ test('same-page filters and explicit self links remain native navigations', asyn
     assert.equal(counts.starts, 2);
 });
 
-test('valid forms show feedback, cancelled logout does not, and back cache resets feedback', async () => {
+test('valid forms do not show the page skeleton and back cache resets feedback', async () => {
     const { win, doc, counts } = setup();
     for (const cancelled of [true, false]) {
         const event = new Event('submit', { cancelable: true });
@@ -66,7 +80,7 @@ test('valid forms show feedback, cancelled logout does not, and back cache reset
         doc.dispatchEvent(event);
     }
     await Promise.resolve();
-    assert.equal(counts.starts, 1);
+    assert.equal(counts.starts, 0);
     assert.equal(counts.navigating, 1);
     win.dispatchEvent(new Event('pageshow'));
     assert.equal(counts.stops, 1);

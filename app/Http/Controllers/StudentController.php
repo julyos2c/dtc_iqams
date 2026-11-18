@@ -3,21 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Models\Course;
-use App\Models\Section;
 use App\Models\Schedule;
+use App\Models\Section;
 use App\Models\Student;
-use App\Models\User;
+use App\Rules\SectionBelongsToCourse;
 use App\Services\AdminAccountProtectionService;
 use App\Services\AuditLogger;
-use App\Services\QrCredentialService;
-use App\Services\RoleAssignmentService;
+use App\Services\EnrollmentWorkflow;
 use App\Services\ProfileImageService;
 use App\Services\StudentScheduleEligibility;
-use App\Rules\SectionBelongsToCourse;
 use App\Support\UserManagementSearch;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -49,15 +47,17 @@ class StudentController extends Controller
             ->orderBy('start_time')->get(['id', 'recurring_schedule_group_id', 'subject_id', 'section_id', 'instructor_id', 'day', 'start_time', 'end_time', 'room'])
             ->groupBy('recurring_schedule_group_id')->map(function ($schedules, $groupId) {
                 $first = $schedules->first();
+
                 return [
                     'id' => $groupId,
                     'label' => sprintf('%s — %s (%s), %s-%s, %s', $first->subject->subject_code, $first->section->section_name,
                         $schedules->pluck('day')->map(fn ($day) => ucfirst(substr($day, 0, 3)))->implode('/'),
-                        \Carbon\Carbon::parse($first->start_time)->format('g:i A'), \Carbon\Carbon::parse($first->end_time)->format('g:i A'), $first->room),
+                        Carbon::parse($first->start_time)->format('g:i A'), Carbon::parse($first->end_time)->format('g:i A'), $first->room),
                 ];
             })->values();
 
         $studentUserIds = (clone $query)->pluck('user_id')->values();
+
         return view('students.index', compact('students', 'courses', 'sections', 'offerings', 'studentUserIds'));
 
     }
@@ -73,79 +73,9 @@ class StudentController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request, StudentScheduleEligibility $eligibility)
+    public function store()
     {
-        $validated = $request->validate([
-            'course_id' => ['required', Rule::exists('courses', 'id')->whereNull('archived_at')],
-            'section_id' => ['nullable', Rule::exists('sections', 'id')->whereNull('archived_at'), new SectionBelongsToCourse($request->input('course_id'))],
-            'enrollment_type' => ['required', Rule::in(['regular', 'irregular'])],
-            'enrollment_group_ids' => ['nullable', 'array'],
-            'enrollment_group_ids.*' => ['uuid', 'distinct'],
-            'student_no' => 'required|string|max:50|unique:students,student_no|unique:users,username',
-            'first_name' => 'required|string|max:255',
-            'last_name' => 'required|string|max:255',
-            'middle_name' => 'nullable|string|max:255',
-            'name_suffix' => 'nullable|string|max:100',
-            'email' => 'required|email|unique:users,email',
-            'avatar' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
-        ]);
-        $this->validateEnrollmentGroups($validated);
-
-        $avatarPath = $request->hasFile('avatar')
-            ? app(ProfileImageService::class)->store($request->file('avatar'))
-            : null;
-
-        $administrator = $request->user();
-
-        try {
-            [$user, $temporaryPassword] = DB::transaction(function () use ($validated, $administrator, $avatarPath, $eligibility) {
-                $studentNo = $validated['student_no'];
-                $temporaryPassword = 'Student@'.$studentNo;
-                $user = User::create([
-                    'username' => $studentNo,
-                    'name' => implode(' ', array_filter([$validated['first_name'], $validated['last_name'], $validated['name_suffix'] ?? null])),
-                    'email' => $validated['email'],
-                    'avatar_path' => $avatarPath,
-                    'password' => Hash::make($temporaryPassword),
-                    'status' => 'active',
-                ]);
-
-                $user->forceFill([
-                    'must_change_password' => true,
-                    'password_changed_at' => null,
-                    'email_verified_at' => null,
-                ])->saveQuietly();
-                app(RoleAssignmentService::class)->assign($user, 'student', $administrator);
-
-                $student = Student::create([
-                    'user_id' => $user->id,
-                    'student_no' => $studentNo,
-                    'first_name' => $validated['first_name'],
-                    'last_name' => $validated['last_name'],
-                    'middle_name' => $validated['middle_name'] ?? null,
-                    'name_suffix' => $validated['name_suffix'] ?? null,
-                    'section_id' => $validated['section_id'] ?? null,
-                    'enrollment_type' => $validated['enrollment_type'],
-                    'course_id' => $validated['course_id'],
-                    'status' => 'active',
-                    'qr_code' => null,
-                ]);
-                $eligibility->sync($student, $validated['enrollment_group_ids'] ?? []);
-
-                app(QrCredentialService::class)->issue($user, $administrator);
-                return [$user, $temporaryPassword];
-            });
-        } catch (\Throwable $exception) {
-            app(ProfileImageService::class)->delete($avatarPath);
-            throw $exception;
-        }
-
-        app(AuditLogger::class)->record('account.created', $user, ['role' => 'student'], $administrator, $request);
-
-        return redirect()->route('students.index')
-            ->with('success', 'Account created successfully.')
-            ->with('keep_create_modal_open', true)
-            ->with('generated_password', $temporaryPassword);
+        abort(403, 'Instructors must submit student registration requests. Admins approve requests and manage existing accounts.');
     }
 
     /**
@@ -182,7 +112,12 @@ class StudentController extends Controller
             'status' => 'required|in:active,inactive,graduated,dropped',
             'avatar' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
         ]);
-        $this->validateEnrollmentGroups($validated);
+        $changeEnrollments = ! app(EnrollmentWorkflow::class)->enabled()
+            && (array_key_exists('enrollment_group_ids', $validated)
+                || $validated['enrollment_type'] !== $student->enrollment_type);
+        if ($changeEnrollments) {
+            $this->validateEnrollmentGroups($validated);
+        }
 
         $oldAvatarPath = $student->user->avatar_path;
         $newAvatarPath = $request->hasFile('avatar')
@@ -190,9 +125,11 @@ class StudentController extends Controller
             : null;
 
         try {
-            DB::transaction(function () use ($validated, $student, $newAvatarPath, $eligibility) {
+            DB::transaction(function () use ($validated, $student, $newAvatarPath, $eligibility, $changeEnrollments) {
                 $student->update($validated);
-                $eligibility->sync($student, $validated['enrollment_group_ids'] ?? []);
+                if ($changeEnrollments) {
+                    $eligibility->sync($student, $validated['enrollment_group_ids'] ?? []);
+                }
                 $student->user->update(array_filter([
                     'name' => implode(' ', array_filter([$validated['first_name'], $validated['last_name'], $validated['name_suffix'] ?? null])),
                     'avatar_path' => $newAvatarPath,

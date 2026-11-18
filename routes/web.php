@@ -28,6 +28,7 @@ use App\Http\Controllers\SectionController;
 use App\Http\Controllers\StaffAttendanceController;
 use App\Http\Controllers\StaffDashboardController;
 use App\Http\Controllers\StudentController;
+use App\Http\Controllers\StudentAbsenceReportController;
 use App\Http\Controllers\StudentDashboardController;
 use App\Http\Controllers\StudentProfileController;
 use App\Http\Controllers\StudentRecordsController;
@@ -40,6 +41,8 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', function () {
     return redirect()->route('login');
 });
+
+Route::view('/privacy-notice', 'privacy-notice')->name('privacy-notice');
 
 Route::get('/dashboard', function () {
     return match (request()->user()->getRoleNames()->first()) {
@@ -71,8 +74,14 @@ Route::middleware(['auth', 'active', 'password.changed', 'role:instructor|staff'
 
 Route::post('/leave-notifications/read', [LeaveNotificationController::class, 'read'])
     ->middleware(['auth', 'active', 'password.changed'])->name('leave-notifications.read');
+Route::post('/notifications/{notification}/open', [LeaveNotificationController::class, 'open'])
+    ->middleware(['auth', 'active', 'password.changed'])->name('notifications.open');
+Route::post('/notifications/clear', [LeaveNotificationController::class, 'clear'])
+    ->middleware(['auth', 'active', 'password.changed'])->name('notifications.clear');
 
 Route::middleware(['auth', 'active', 'password.changed', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('class-cancellations', [\App\Http\Controllers\ClassCancellationController::class, 'index'])->middleware('permission:manage-schedules')->name('class-cancellations.index');
+    Route::patch('class-cancellations/{classCancellation}', [\App\Http\Controllers\ClassCancellationController::class, 'review'])->middleware(['permission:manage-schedules', 'password.confirm'])->name('class-cancellations.review');
     Route::get('dashboard', [AdminDashboardController::class, 'index'])->middleware('permission:view-reports')->name('dashboard');
     Route::get('dashboard/realtime', [AdminDashboardController::class, 'realtime'])->middleware('permission:view-reports')->name('dashboard.realtime');
     Route::get('dashboard/delta', [AdminDashboardController::class, 'delta'])->middleware('permission:view-reports')->name('dashboard.delta');
@@ -90,8 +99,14 @@ Route::middleware(['auth', 'active', 'password.changed', 'role:admin'])->prefix(
         Route::post('/exports', [ReportExportController::class, 'store'])->name('exports.store');
     });
     Route::get('report-exports/{reportExport}', [ReportExportController::class, 'show'])->middleware('permission:view-reports')->name('report-exports.show');
+    Route::get('reports/student-absences', [StudentAbsenceReportController::class, 'index'])->middleware('permission:view-reports')->name('reports.student-absences.index');
+    Route::get('reports/student-absences/export', [StudentAbsenceReportController::class, 'export'])->middleware('permission:view-reports')->name('reports.student-absences.export');
+    Route::get('reports/student-absences/{student}', [StudentAbsenceReportController::class, 'details'])->middleware('permission:view-reports')->name('reports.student-absences.details');
     Route::get('report-exports/{reportExport}/download', [ReportExportController::class, 'download'])->middleware('permission:view-reports')->name('report-exports.download');
     Route::get('leave-requests', [AdminLeaveRequestController::class, 'index'])->middleware('permission:review-leave-requests')->name('leave-requests.index');
+    Route::get('enrollment-requests', [\App\Http\Controllers\AdminEnrollmentRequestController::class, 'index'])->middleware('permission:review-enrollment-requests')->name('enrollment-requests.index');
+    Route::get('students/submissions', [\App\Http\Controllers\AdminEnrollmentRequestController::class, 'index'])->middleware(['permission:manage-users', 'permission:review-enrollment-requests'])->name('students.submissions');
+    Route::post('enrollment-requests/review', [\App\Http\Controllers\AdminEnrollmentRequestController::class, 'review'])->middleware(['permission:review-enrollment-requests', 'password.confirm'])->name('enrollment-requests.review');
     Route::get('leave-requests/{leaveRequest}/attachment', [AdminLeaveRequestController::class, 'attachment'])->middleware('permission:review-leave-requests')->name('leave-requests.attachment');
     Route::patch('leave-requests/{leaveRequest}', [AdminLeaveRequestController::class, 'update'])->middleware(['permission:review-leave-requests', 'password.confirm'])->name('leave-requests.update');
 });
@@ -136,15 +151,18 @@ Route::middleware(['auth', 'active', 'password.changed', 'role:admin'])->group(f
 });
 
 Route::middleware(['auth', 'active', 'password.changed', 'role:student'])->prefix('student')->name('student.')->group(function () {
+    Route::get('excuses', [\App\Http\Controllers\StudentExcuseController::class, 'studentIndex'])->name('excuses.index');
+    Route::post('excuses', [\App\Http\Controllers\StudentExcuseController::class, 'store'])->name('excuses.store');
+    Route::get('excuses/{excuse}/attachment', [\App\Http\Controllers\StudentExcuseController::class, 'attachment'])->name('excuses.attachment');
     Route::get('dashboard', [StudentDashboardController::class, 'index'])->name('dashboard');
     Route::get('dashboard/realtime', [StudentDashboardController::class, 'realtime'])->name('dashboard.realtime');
     Route::get('schedule', [StudentScheduleController::class, 'index'])->name('schedule');
     Route::get('profile', [StudentProfileController::class, 'show'])->name('profile');
+    Route::get('profile/qr', [StudentProfileController::class, 'qr'])->name('profile.qr');
     Route::patch('profile/contact', [StudentProfileController::class, 'updateContact'])->name('profile.contact');
     Route::put('profile/photo', [StudentProfileController::class, 'updatePhoto'])->name('profile.photo');
     Route::delete('profile/photo', [StudentProfileController::class, 'removePhoto'])->name('profile.photo.destroy');
     Route::get('attendance', [StudentRecordsController::class, 'attendance'])->name('attendance');
-    Route::get('qr-code', [StudentRecordsController::class, 'qr'])->name('qr');
     Route::get('settings', [StudentProfileController::class, 'settings'])->name('settings');
     Route::put('settings/password', [StudentProfileController::class, 'updatePassword'])->name('password');
 });
@@ -157,18 +175,42 @@ Route::middleware(['auth', 'active', 'password.changed', 'role:staff'])->prefix(
     Route::get('attendance/issues', [StaffAttendanceController::class, 'issues'])->name('attendance.issues');
     Route::get('profile', [MyProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('profile', [MyProfileController::class, 'update'])->name('profile.update');
+    Route::get('settings', [MyProfileController::class, 'staffSettings'])->name('settings');
+    Route::patch('settings', [MyProfileController::class, 'update'])->name('settings.update');
     Route::get('leave-requests', [LeaveRequestController::class, 'index'])->name('leave-requests.index');
     Route::post('leave-requests', [LeaveRequestController::class, 'store'])->name('leave-requests.store');
     Route::patch('leave-requests/{leaveRequest}/cancel', [LeaveRequestController::class, 'cancel'])->name('leave-requests.cancel');
 });
 
 Route::middleware(['auth', 'active', 'password.changed', 'role:instructor'])->prefix('instructor')->name('instructor.')->group(function () {
+    Route::get('excuses', [\App\Http\Controllers\StudentExcuseController::class, 'instructorIndex'])->name('excuses.index');
+    Route::patch('excuses/{decision}', [\App\Http\Controllers\StudentExcuseController::class, 'decide'])->name('excuses.decide');
+    Route::get('excuses/attachment/{excuse}', [\App\Http\Controllers\StudentExcuseController::class, 'attachment'])->name('excuses.attachment');
+    Route::get('settings', [MyProfileController::class, 'settings'])->name('settings');
+    Route::patch('settings/email', [MyProfileController::class, 'updateEmail'])->name('settings.email');
+    Route::get('subjects', [\App\Http\Controllers\InstructorSubjectRosterController::class, 'index'])->name('subjects.index');
+    Route::get('subjects/{groupId}', [\App\Http\Controllers\InstructorSubjectRosterController::class, 'show'])->whereUuid('groupId')->middleware('throttle:60,1')->name('subjects.show');
+    Route::get('subjects/{groupId}/students/search', [\App\Http\Controllers\InstructorSubjectRosterController::class, 'searchStudents'])->whereUuid('groupId')->middleware('throttle:60,1')->name('subjects.students.search');
+    Route::post('subjects/{groupId}/students', [\App\Http\Controllers\InstructorSubjectRosterController::class, 'add'])->whereUuid('groupId')->middleware('throttle:60,1')->name('subjects.students.store');
+    Route::delete('subjects/{groupId}/students/{entry}', [\App\Http\Controllers\InstructorSubjectRosterController::class, 'remove'])->whereUuid('groupId')->name('subjects.students.destroy');
+    Route::get('subjects/{groupId}/copy-preview', [\App\Http\Controllers\InstructorSubjectRosterController::class, 'copyPreview'])->whereUuid('groupId')->middleware('throttle:60,1')->name('subjects.copy-preview');
+    Route::post('subjects/{groupId}/copy', [\App\Http\Controllers\InstructorSubjectRosterController::class, 'copy'])->whereUuid('groupId')->middleware('throttle:20,1')->name('subjects.copy');
+    Route::post('subjects/{groupId}/submit', [\App\Http\Controllers\InstructorSubjectRosterController::class, 'submit'])->whereUuid('groupId')->middleware('throttle:10,1')->name('subjects.submit');
+    Route::get('class-lists', [\App\Http\Controllers\InstructorClassListController::class, 'index'])->name('class-lists.index');
+    Route::post('class-lists', [\App\Http\Controllers\InstructorClassListController::class, 'store'])->middleware('throttle:30,1')->name('class-lists.store');
+    Route::get('class-lists/{classList}', [\App\Http\Controllers\InstructorClassListController::class, 'show'])->middleware('throttle:60,1')->name('class-lists.show');
+    Route::post('class-lists/{classList}/entries', [\App\Http\Controllers\InstructorClassListController::class, 'addEntry'])->middleware('throttle:60,1')->name('class-lists.entries.store');
+    Route::delete('class-lists/{classList}/entries/{entry}', [\App\Http\Controllers\InstructorClassListController::class, 'removeEntry'])->name('class-lists.entries.destroy');
+    Route::post('class-lists/{classList}/submit', [\App\Http\Controllers\InstructorClassListController::class, 'submit'])->middleware('throttle:10,1')->name('class-lists.submit');
+    Route::get('enrollment-requests/{enrollmentRequest}/resubmit', [\App\Http\Controllers\InstructorClassListController::class, 'editRequest'])->name('enrollment-requests.edit');
+    Route::post('enrollment-requests/{enrollmentRequest}/resubmit', [\App\Http\Controllers\InstructorClassListController::class, 'resubmit'])->middleware('throttle:10,1')->name('enrollment-requests.resubmit');
     Route::get('dashboard', [InstructorDashboardController::class, 'index'])->name('dashboard');
     Route::get('dashboard/realtime', [InstructorDashboardController::class, 'realtime'])->name('dashboard.realtime');
     Route::get('attendance', [InstructorAttendanceController::class, 'history'])->name('attendance');
     Route::get('summary', [InstructorAttendanceController::class, 'summary'])->name('summary');
     Route::get('issues', [InstructorAttendanceController::class, 'issues'])->name('issues');
     Route::get('schedule', [InstructorAttendanceController::class, 'schedule'])->name('schedule');
+    Route::post('schedule/{schedule}/cancellation', [\App\Http\Controllers\ClassCancellationController::class, 'store'])->name('schedule.cancellation');
     Route::get('schedule/{schedule}/attendance', [InstructorAttendanceController::class, 'classAttendance'])->name('schedule.attendance');
     Route::get('schedule/{schedule}/attendance/download', [InstructorAttendanceController::class, 'downloadClassAttendance'])->name('schedule.attendance.download');
 });

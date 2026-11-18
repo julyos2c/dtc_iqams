@@ -11,7 +11,7 @@ class InstructorStudentAbsenceWarningService
     /** @return Collection<int, array<string, mixed>> */
     public function forInstructor(Instructor $instructor): Collection
     {
-        $rows = DB::table('attendance_logs')
+        $query = DB::table('attendance_logs')
             ->join('schedules', 'schedules.id', '=', 'attendance_logs.schedule_id')
             ->join('subjects', 'subjects.id', '=', 'schedules.subject_id')
             ->join('sections', 'sections.id', '=', 'schedules.section_id')
@@ -30,7 +30,8 @@ class InstructorStudentAbsenceWarningService
             })
             ->orderBy('students.last_name')->orderBy('students.first_name')
             ->orderBy('subjects.subject_code')->orderBy('attendance_logs.attendance_date')
-            ->get([
+            ;
+        $rows = ClassCancellationReportFilter::exclude($query)->get([
                 'students.id as student_id',
                 'students.student_no',
                 'students.first_name',
@@ -41,10 +42,13 @@ class InstructorStudentAbsenceWarningService
                 'subjects.subject_name',
                 'sections.id as section_id',
                 'sections.section_name',
+                'schedules.recurring_schedule_group_id',
                 'attendance_logs.attendance_date',
             ]);
 
-        return $rows->groupBy(fn ($row) => implode('|', [$row->student_id, $row->subject_id, $row->section_id]))
+        return $rows->groupBy(fn ($row) => implode('|', [$row->student_id, $row->subject_id, $row->section_id,
+            app(EnrollmentWorkflow::class)->enabled() ? $row->recurring_schedule_group_id : '',
+        ]))
             ->map(function (Collection $group): array {
                 $first = $group->first();
                 return [

@@ -11,7 +11,6 @@ class StudentAttendanceSummary
 {
     public function __construct(
         private AttendanceSummaryCache $cache,
-        private StudentScheduleEligibility $eligibility,
     ) {}
 
     /**
@@ -42,8 +41,7 @@ class StudentAttendanceSummary
     /**
      * Return chart-ready attendance rates using the exact same rated-session
      * rules as the student summary. There is no academic-term date table, so
-     * the semester view starts at the first rated session in the student's
-     * currently assigned section.
+     * the semester view starts at the student's first recorded rated session.
      *
      * @return array{week: array<int, array{label: string, percentage: float}>, month: array<int, array{label: string, percentage: float}>, semester: array<int, array{label: string, percentage: float}>}
      */
@@ -72,7 +70,7 @@ class StudentAttendanceSummary
         $cancelled = "COALESCE(school_events.attendance_mode, '') = 'cancelled'";
         $notExcluded = "attendance_logs.status <> 'excused' AND NOT ({$cancelled})";
 
-        return DB::table('attendance_logs')
+        $query = DB::table('attendance_logs')
             ->leftJoin('schedules', 'schedules.id', '=', 'attendance_logs.schedule_id')
             ->leftJoin('school_events', 'school_events.id', '=', 'attendance_logs.school_event_id')
             ->where(function ($query): void {
@@ -83,13 +81,8 @@ class StudentAttendanceSummary
             ->where(function ($query): void {
                 $query->whereNotNull('attendance_logs.schedule_id')->orWhereNotNull('attendance_logs.school_event_id');
             })
-            ->where(function ($query) use ($student): void {
-                $query->where(function ($query) use ($student): void {
-                    $query->whereNotNull('schedules.id')
-                        ->whereIn('schedules.id', $this->eligibility->schedulesFor($student)->select('schedules.id'));
-                })->orWhereNotNull('school_events.id');
-            })
             ->selectRaw("\n                COALESCE(SUM(CASE WHEN {$notExcluded} AND attendance_logs.status = 'present' THEN 1 ELSE 0 END), 0) AS present,\n                COALESCE(SUM(CASE WHEN {$notExcluded} AND attendance_logs.status = 'late' THEN 1 ELSE 0 END), 0) AS late,\n                COALESCE(SUM(CASE WHEN {$notExcluded} AND attendance_logs.status = 'absent' THEN 1 ELSE 0 END), 0) AS absent,\n                COALESCE(SUM(CASE WHEN attendance_logs.status = 'excused' THEN 1 ELSE 0 END), 0) AS excused,\n                COALESCE(SUM(CASE WHEN {$cancelled} OR attendance_logs.status = 'excused' THEN 1 ELSE 0 END), 0) AS excluded\n            ");
+        return ClassCancellationReportFilter::exclude($query);
     }
 
     /** @return Collection<int, object> */
@@ -105,48 +98,7 @@ class StudentAttendanceSummary
             ->orderBy('attendance_logs.attendance_date')
             ->get();
 
-        // The absence command normally materializes these rows. Fill any gap
-        // for completed schedules on dates already represented in the history,
-        // so an unrecorded subject cannot make that period appear perfect.
-        $dates = $rows->pluck('attendance_date')->filter()->map(fn ($date) => Carbon::parse($date, config('app.timezone'))->toDateString())->unique();
-        if ($dates->isEmpty()) {
-            return $rows;
-        }
-
-        $schedules = $this->eligibility->schedulesFor($student)->get(['id', 'day', 'start_time', 'end_time']);
-        $existing = $rows->filter(fn ($row) => $row->schedule_id !== null)
-            ->map(fn ($row) => Carbon::parse($row->attendance_date, config('app.timezone'))->toDateString().'|'.$row->schedule_id)
-            ->flip();
-
-        foreach ($dates as $dateString) {
-            if ($rows->contains(fn ($row) => Carbon::parse($row->attendance_date, config('app.timezone'))->toDateString() === $dateString
-                && $row->event_attendance_mode === 'cancelled')) {
-                continue;
-            }
-            $date = Carbon::parse($dateString, config('app.timezone'));
-            foreach ($schedules as $schedule) {
-                if (strtolower($date->format('l')) !== strtolower((string) $schedule->day)) {
-                    continue;
-                }
-
-                $occurrence = app(\App\Services\ScheduleOccurrenceResolver::class)->forDate($schedule, $date);
-                if (! $occurrence || now(config('app.timezone'))->lessThanOrEqualTo($occurrence->endsAt)) {
-                    continue;
-                }
-
-                $key = $dateString.'|'.$schedule->id;
-                if (! $existing->has($key)) {
-                    $rows->push((object) [
-                        'status' => 'absent',
-                        'attendance_date' => $dateString,
-                        'schedule_id' => $schedule->id,
-                        'event_attendance_mode' => null,
-                    ]);
-                    $existing->put($key, true);
-                }
-            }
-        }
-
+        // Historical absences come from persisted records, never current membership.
         return $rows->sortBy('attendance_date')->values();
     }
 
@@ -177,6 +129,8 @@ class StudentAttendanceSummary
             return [
                 'label' => $unit === 'day' ? $date->format('D') : ($numberWeeks ? 'Week '.($from->diffInWeeks($date) + 1) : $date->format('M j')),
                 'percentage' => $scheduled > 0 ? round($attended / $scheduled * 100, 2) : 0.0,
+                'attended' => $attended,
+                'scheduled' => $scheduled,
             ];
         })->values()->all();
     }
