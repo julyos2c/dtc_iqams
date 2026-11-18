@@ -1,6 +1,7 @@
 <x-app-layout>
     <x-slot name="header">
         <h2 class="text-xl font-semibold text-gray-800">School Events</h2>
+        <p class="mt-1 text-sm text-gray-500">Dated exceptions for holidays, meetings, and required events.</p>
     </x-slot>
     <div class="py-8" x-data="schoolEventsModal(@js([
     'showModal' => $errors->any() && old('form_context') === 'school_event_modal',
@@ -28,8 +29,7 @@
                 </div>
             @endif
             <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-                <div class="flex flex-col gap-3 border-b border-gray-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                    <p class="text-sm leading-6 text-gray-500">Dated exceptions for holidays, meetings, and required events.</p>
+                <div class="flex justify-end border-b border-gray-200 px-5 py-4">
                     <button type="button" @click="openCreate()"
                         class="inline-flex shrink-0 items-center justify-center rounded-md bg-indigo-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">New event</button>
                 </div>

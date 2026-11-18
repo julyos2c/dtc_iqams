@@ -11,6 +11,7 @@
         ['route' => 'staff.attendance.issues', 'label' => 'Attendance Issues', 'icon' => 'M12 9v4m0 4h.01M10.3 3.6L2.6 17a2 2 0 001.7 3h15.4a2 2 0 001.7-3L13.7 3.6a2 2 0 00-3.4 0z'],
         ['route' => 'staff.leave-requests.index', 'active' => 'staff.leave-requests.*', 'label' => 'Leave Requests', 'icon' => 'M7 3h10a2 2 0 012 2v16l-7-3-7 3V5a2 2 0 012-2z'],
         ['route' => 'staff.profile.edit', 'label' => 'Profile', 'icon' => 'M5.1 17.8a9 9 0 1113.8 0M15 11a3 3 0 11-6 0 3 3 0 016 0z'],
+        ['route' => 'staff.settings', 'active' => 'staff.settings*', 'label' => 'Settings', 'icon' => 'M12 8a4 4 0 100 8 4 4 0 000-8z M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M12 2v2m0 16v2M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4'],
     ];
 @endphp
 
@@ -48,7 +49,7 @@
         </aside>
 
         <div class="min-w-0 flex-1">
-            <header class="flex min-h-[76px] items-center gap-3 border-b border-slate-100 bg-white px-4 sm:min-h-[92px] sm:gap-5 sm:px-7 lg:px-8">
+            <header class="sticky top-0 z-30 flex min-h-[76px] items-center gap-3 border-b border-slate-100 bg-white px-4 sm:min-h-[92px] sm:gap-5 sm:px-7 lg:px-8">
                 <button type="button" @click="sidebarOpen=true" class="shrink-0 rounded-xl border border-slate-200 bg-white p-2.5 text-[#15355e] shadow-sm transition hover:bg-slate-50 lg:hidden" aria-label="Open navigation"><x-heroicon-o-bars-3 class="h-5 w-5" /></button>
                 <div class="min-w-0"><h1 class="truncate text-lg font-extrabold text-slate-950 sm:text-xl">{{ $title === 'Dashboard' ? $portalGreeting.', '.$portalName.'!' : $title }}</h1><p class="mt-1 text-xs text-slate-500 sm:text-sm">Non-Teaching Personnel <span class="mx-2">•</span> {{ $portalStaff?->officeUnit?->name ?? 'Office/unit not assigned' }}</p></div>
                 <div class="ml-auto flex shrink-0 items-center gap-2 sm:gap-4">

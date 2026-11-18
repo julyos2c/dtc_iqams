@@ -177,10 +177,9 @@ class Phase2IdentityAuthorizationTest extends TestCase
         ], $user);
 
         $metadata = $log->fresh()->metadata;
-        $this->assertSame('kept', $metadata['visible']);
         $this->assertSame('console', $metadata['source']);
-        $this->assertArrayNotHasKey('password', $metadata['user_snapshot']);
-        $this->assertArrayNotHasKey('remember_token', $metadata['user_snapshot']);
+        $this->assertArrayNotHasKey('visible', $metadata);
+        $this->assertArrayNotHasKey('user_snapshot', $metadata);
 
         $this->expectException(LogicException::class);
         $log->update(['action' => 'tampered']);
@@ -214,16 +213,15 @@ class Phase2IdentityAuthorizationTest extends TestCase
     public function test_audit_log_page_is_read_only_and_filterable(): void
     {
         $admin = $this->user('admin');
-        app(AuditLogger::class)->record('filterable.action', $admin, ['visible' => 'yes'], $admin);
+        app(AuditLogger::class)->record('auth.login_failed', $admin, ['reason' => 'invalid_credentials'], $admin);
 
         $this->actingAs($admin)
-            ->get(route('admin.audit-logs.index', ['action' => 'filterable.action']))
+            ->get(route('admin.audit-logs.index', ['action' => 'auth.login_failed']))
             ->assertOk()
-            ->assertSee('Filterable Action')
-            ->assertSee('Audit activity')
-            ->assertSee('Visible')
-            ->assertSee('yes')
-            ->assertDontSee('{"visible":"yes"}');
+            ->assertSee('Auth Login Failed')
+            ->assertSee('Audit Logs')
+            ->assertSee('Reason')
+            ->assertSee('invalid_credentials');
     }
 
     public function test_audit_log_page_requires_its_explicit_permission(): void

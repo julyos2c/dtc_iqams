@@ -14,6 +14,33 @@ use Throwable;
 
 class MyProfileController extends Controller
 {
+    public function settings(): View
+    {
+        return view('instructor.settings');
+    }
+
+    public function staffSettings(Request $request): View
+    {
+        return view('staff.settings', ['user' => $request->user()]);
+    }
+
+    public function updateEmail(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+        $validated = $request->validate([
+            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', Rule::unique(User::class)->ignore($user->id)],
+        ]);
+
+        $user->email = $validated['email'];
+        if ($user->isDirty('email')) {
+            $user->email_verified_at = null;
+            $user->save();
+            app(AuditLogger::class)->record('account.profile_updated', $user, [], $user, $request);
+        }
+
+        return redirect()->route('instructor.settings')->with('success', 'Email address updated successfully.');
+    }
+
     public function edit(Request $request): View|RedirectResponse
     {
         $user = $request->user();
@@ -25,13 +52,15 @@ class MyProfileController extends Controller
         $user->load(match ($user->primaryRoleName()) {
             'student' => ['roles', 'student.course', 'student.section'],
             'instructor' => ['roles', 'instructor.department'],
-            'staff' => ['roles', 'nonTeachingStaff'],
+            'staff' => ['roles', 'nonTeachingStaff.officeUnit'],
             default => ['roles'],
         });
 
-        return $user->isInstructor()
-            ? view('instructor.profile', compact('user'))
-            : view('my-profile.edit', compact('user'));
+        return match (true) {
+            $user->isInstructor() => view('instructor.profile', compact('user')),
+            $user->isStaff() => view('staff.profile', compact('user')),
+            default => view('my-profile.edit', compact('user')),
+        };
     }
 
     public function update(Request $request): RedirectResponse
@@ -116,7 +145,7 @@ class MyProfileController extends Controller
             app(AuditLogger::class)->record('account.profile_updated', $user, [], $user, $request);
         }
 
-        $route = $user->isStaff() ? 'staff.profile.edit' : 'my-profile.edit';
+        $route = $request->routeIs('staff.settings.update') ? 'staff.settings' : ($user->isStaff() ? 'staff.profile.edit' : 'my-profile.edit');
 
         return redirect()->route($route)->with('status', 'profile-updated');
     }

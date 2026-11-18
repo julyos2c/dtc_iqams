@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AttendanceLog;
 use App\Models\Schedule;
 use App\Models\Student;
+use App\Services\EnrollmentWorkflow;
 use App\Services\PersonnelAttendancePages;
 use App\Services\ScheduleOccurrenceResolver;
 use App\Services\StudentScheduleEligibility;
@@ -48,7 +49,7 @@ class InstructorAttendanceController extends Controller
         $instructor = $request->user()->instructor;
         abort_unless($instructor, 403);
         $dayOrder = collect(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']);
-        $scheduleGroups = $instructor->schedules()
+        $scheduleGroups = $instructor->schedules()->active()
             ->select(['id', 'subject_id', 'instructor_id', 'section_id', 'day', 'start_time', 'end_time', 'room', 'recurring_schedule_group_id'])
             ->with(['subject:id,subject_code,subject_name', 'section:id,section_name'])
             ->orderBy('start_time')->get()
@@ -68,6 +69,7 @@ class InstructorAttendanceController extends Controller
 
                 return [
                     'key' => 'schedule-'.$first->id,
+                    'roster_url' => $first->recurring_schedule_group_id ? route('instructor.subjects.show', $first->recurring_schedule_group_id) : null,
                     'subject_code' => $first->subject?->subject_code ?? 'Subject',
                     'subject_name' => $first->subject?->subject_name ?? 'Unnamed subject',
                     'section' => $first->section?->section_name ?? 'No section',
@@ -83,7 +85,17 @@ class InstructorAttendanceController extends Controller
                 ];
             })->values();
 
-        return view('instructor.schedule', compact('instructor', 'scheduleGroups'));
+        $cancellations = \App\Models\ClassCancellationRequest::where('requester_id', $request->user()->id)->with('schedule.subject')->latest()->limit(30)->get();
+        $approvedLeaves = $request->user()->leaveRequests()->where('status', 'approved')->whereDate('end_date', '>=', now()->toDateString())->orderBy('start_date')->get();
+        $leaveClasses = $approvedLeaves->map(function ($leave) use ($scheduleGroups) {
+            $classes = $scheduleGroups->flatMap(fn ($group) => collect($group['days'])->filter(function ($day) use ($leave) {
+                $first = $leave->start_date->copy()->startOfDay();
+                if (strtolower($first->format('l')) !== $day['name']) $first->next($day['name']);
+                return $first->lessThanOrEqualTo($leave->end_date->copy()->endOfDay());
+            })->map(fn ($day) => $group['subject_code'].' · '.$group['section'].' · '.$day['label'].' '.$group['start_time']));
+            return ['leave' => $leave, 'classes' => $classes];
+        });
+        return view('instructor.schedule', compact('instructor', 'scheduleGroups', 'cancellations', 'leaveClasses'));
     }
 
     public function classAttendance(
@@ -119,6 +131,7 @@ class InstructorAttendanceController extends Controller
             $sheet->mergeCells('B4:E4')->setCellValue('B4', $class['section']);
             $sheet->setCellValue('A5', 'Date and time:');
             $sheet->mergeCells('B5:E5')->setCellValue('B5', $class['date_label'].' | '.$class['time_label']);
+            if ($class['cancellation_status']) $sheet->setCellValue('A6', $class['cancellation_status'] === 'approved' ? 'Class Cancelled' : 'Cancellation Pending');
             $sheet->fromArray(['No.', 'Student No.', 'Student Name', 'Time In', 'Status'], null, 'A7');
 
             $rowNumber = 8;
@@ -195,7 +208,16 @@ class InstructorAttendanceController extends Controller
         }
 
         $schedule->loadMissing(['subject:id,subject_code,subject_name', 'section:id,section_name']);
-        $students = $eligibility->studentsForSchedule($schedule)
+        $roster = $eligibility->studentsForSchedule($schedule, $occurrence->startsAt);
+        if (app(EnrollmentWorkflow::class)->enabled()) {
+            // Preserve recorded history and include students approved mid-session
+            // if they actually scanned, without assigning them a retroactive absence.
+            $roster = Student::query()->where(fn ($query) => $query
+                ->whereIn('students.id', $roster->select('students.id'))
+                ->orWhereIn('students.user_id', AttendanceLog::canonical()->where('schedule_id', $schedule->id)
+                    ->where('attendance_type', 'time_in')->whereBetween('scan_time', [$occurrence->opensAt, $occurrence->endsAt])->select('user_id')));
+        }
+        $students = $roster
             ->select(['id', 'user_id', 'student_no', 'first_name', 'last_name', 'middle_name', 'section_id', 'status'])
             ->orderBy('last_name')->orderBy('first_name')->get();
 
@@ -206,10 +228,11 @@ class InstructorAttendanceController extends Controller
             ->select(['id', 'user_id', 'scan_time', 'status'])
             ->orderBy('scan_time')->get()->keyBy('user_id');
         $cutoffPassed = now(config('app.timezone'))->greaterThan($occurrence->presentUntil);
+        $cancellationStatus = app(\App\Services\ClassCancellationService::class)->status($occurrence);
 
-        $rows = $students->map(function (Student $student) use ($logs, $cutoffPassed) {
+        $rows = $students->map(function (Student $student) use ($logs, $cutoffPassed, $cancellationStatus) {
             $log = $logs->get($student->user_id);
-            $status = $log?->status ?? ($cutoffPassed ? 'absent' : 'pending');
+            $status = $log?->status ?? ($cutoffPassed && ! $cancellationStatus ? 'absent' : 'pending');
             $hasScan = $log && $log->status !== 'absent';
 
             return [
@@ -226,6 +249,7 @@ class InstructorAttendanceController extends Controller
         return [
             'class' => [
                 'schedule_id' => $schedule->id,
+                'cancellation_status' => $cancellationStatus,
                 'subject_code' => $schedule->subject?->subject_code ?? 'Subject',
                 'subject_name' => $schedule->subject?->subject_name ?? 'Unnamed subject',
                 'instructor' => $instructor->fullName(),
@@ -236,10 +260,10 @@ class InstructorAttendanceController extends Controller
                 'time_label' => $occurrence->startsAt->format('g:i A').' - '.$occurrence->endsAt->format('g:i A'),
             ],
             'summary' => [
-                'present' => $rows->whereIn('status', ['present', 'late'])->count(),
-                'absent' => $rows->where('status', 'absent')->count(),
-                'excused' => $rows->where('status', 'excused')->count(),
-                'pending' => $rows->where('status', 'pending')->count(),
+                'present' => $cancellationStatus === 'approved' ? 0 : $rows->whereIn('status', ['present', 'late'])->count(),
+                'absent' => $cancellationStatus === 'approved' ? 0 : $rows->where('status', 'absent')->count(),
+                'excused' => $cancellationStatus === 'approved' ? 0 : $rows->where('status', 'excused')->count(),
+                'pending' => $cancellationStatus === 'approved' ? 0 : $rows->where('status', 'pending')->count(),
             ],
             'has_students' => $rows->isNotEmpty(),
             'has_records' => $rows->contains('recorded', true),

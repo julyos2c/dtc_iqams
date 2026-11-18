@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Schedule;
+use App\Models\StudentScheduleEnrollment;
 use App\Services\AuditLogger;
 use App\Services\ArchiveService;
 use App\Rules\ValidScheduleTimeWindow;
@@ -97,6 +98,12 @@ class ScheduleController extends Controller
 
         DB::transaction(function () use ($validated, $schedule, $request) {
             $schedule = Schedule::query()->lockForUpdate()->findOrFail($schedule->getKey());
+            if (app(\App\Services\EnrollmentWorkflow::class)->enabled()
+                && ($schedule->subject_id !== (int) $validated['subject_id'] || $schedule->section_id !== (int) $validated['section_id'])
+                && (StudentScheduleEnrollment::where('recurring_schedule_group_id', $schedule->recurring_schedule_group_id)->exists()
+                    || \App\Models\EnrollmentRequest::where('recurring_schedule_group_id', $schedule->recurring_schedule_group_id)->exists())) {
+                throw ValidationException::withMessages(['subject_id' => 'This offering has enrollment history. Create a new offering to change its subject or section.']);
+            }
             $group = $schedule->recurring_schedule_group_id
                 ? Schedule::query()
                     ->where('recurring_schedule_group_id', $schedule->recurring_schedule_group_id)
@@ -121,7 +128,8 @@ class ScheduleController extends Controller
             }
 
             $this->ensureNoDuplicates($validated, [$schedule->getKey()]);
-            $newGroupId = (string) Str::uuid();
+            $originalGroupId = $schedule->recurring_schedule_group_id;
+            $newGroupId = $group->count() === 1 && $originalGroupId ? $originalGroupId : (string) Str::uuid();
 
             $days = $validated['days'];
             $schedule->update($this->attributesForDay($validated, array_shift($days), $newGroupId));
@@ -130,6 +138,15 @@ class ScheduleController extends Controller
             foreach ($days as $day) {
                 $created = Schedule::create($this->attributesForDay($validated, $day, $newGroupId));
                 app(AuditLogger::class)->record('record.created', $created, ['record' => 'schedule'], $request->user(), $request);
+            }
+
+            // A detached meeting still belongs to its enrolled students. Keep
+            // the original enrollment as well for the remaining weekly meetings.
+            foreach (StudentScheduleEnrollment::where('recurring_schedule_group_id', $originalGroupId)->get() as $enrollment) {
+                StudentScheduleEnrollment::firstOrCreate([
+                    'student_id' => $enrollment->student_id,
+                    'recurring_schedule_group_id' => $newGroupId,
+                ], ['effective_at' => $enrollment->effective_at, 'origin' => $enrollment->origin]);
             }
         });
 

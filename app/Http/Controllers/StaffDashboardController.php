@@ -20,6 +20,7 @@ class StaffDashboardController extends Controller
 
         $month = $summary->dashboardMonth($user, now(config('app.timezone')));
         $today = $month['today'];
+        $monthDays = $month['monthDays'];
         $totals = $month['totals'];
         $recentLogs = AttendanceLog::canonical()->where('user_id', $user->id)
             ->whereNull('schedule_id')
@@ -28,7 +29,7 @@ class StaffDashboardController extends Controller
             ->limit(8)
             ->get();
 
-        return view('staff.dashboard', compact('staff', 'today', 'totals', 'recentLogs'));
+        return view('staff.dashboard', compact('staff', 'today', 'totals', 'monthDays', 'recentLogs'));
     }
 
     public function realtime(Request $request, PersonnelAttendanceSummary $summary)

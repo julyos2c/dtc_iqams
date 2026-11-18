@@ -48,6 +48,40 @@ class PersonnelAttendanceReportService
         return ['date' => $date->copy(), 'rows' => $rows, 'filters' => $filters];
     }
 
+    public function getMonthlyReport(Carbon $date, array $filters = []): array
+    {
+        $personnel = $this->personnel($filters);
+        $logs = collect();
+        $start = $date->copy()->startOfMonth();
+        $end = $start->copy()->addMonth();
+        $personnel->pluck('user_id')->unique()->chunk(500)->each(function (Collection $userIds) use ($start, $end, &$logs): void {
+            AttendanceLog::canonical()->whereIn('user_id', $userIds)
+                ->whereNull('schedule_id')->whereNull('school_event_id')
+                ->where('scan_time', '>=', $start)->where('scan_time', '<', $end)
+                ->whereIn('attendance_period', PersonnelAttendanceSummary::PERIODS)
+                ->reorder('attendance_logs.id', 'asc')
+                ->chunkById(500, function (Collection $chunk) use (&$logs): void {
+                    $logs = $logs->concat($chunk);
+                }, 'attendance_logs.id', 'id');
+        });
+        $logs = $logs->groupBy('user_id');
+        $rows = $personnel->flatMap(function (array $person) use ($logs): Collection {
+            return $logs->get($person['user_id'], collect())
+                ->groupBy(fn ($log) => $log->scan_time->copy()->timezone(config('app.timezone'))->toDateString())
+                ->sortKeys()->map(function (Collection $dayLogs, string $day) use ($person): array {
+                    $periods = $dayLogs->groupBy('attendance_period');
+                    return $person + [
+                        'day' => $day,
+                        'morning_time_in' => $this->time($periods->get('morning_in'), false),
+                        'morning_time_out' => $this->time($periods->get('lunch_out'), true),
+                        'afternoon_time_in' => $this->time($periods->get('afternoon_in'), false),
+                        'afternoon_time_out' => $this->time($periods->get('final_out'), true),
+                    ];
+                })->values();
+        })->values();
+        return ['date' => $start, 'rows' => $rows, 'filters' => $filters];
+    }
+
     public function filterOptions(?Collection $unfilteredPersonnel = null): array
     {
         return [

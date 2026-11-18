@@ -8,7 +8,7 @@ export function installNavigationFeedback(win, doc, loader) {
     doc.addEventListener('click', (event) => {
         if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         const link = event.target.closest?.('a[href]');
-        if (!link || (link.target && link.target.toLowerCase() !== '_self') || link.hasAttribute('download')) return;
+        if (!link || link.hasAttribute('data-no-navigation-loader') || (link.target && link.target.toLowerCase() !== '_self') || link.hasAttribute('download')) return;
         const destination = new URL(link.href, win.location.href);
         const current = new URL(win.location.href);
         if (!['http:', 'https:'].includes(destination.protocol)) return;
@@ -22,7 +22,10 @@ export function installNavigationFeedback(win, doc, loader) {
         const form = event.target;
         if (!event.defaultPrevented && form instanceof win.HTMLFormElement
             && (!form.target || form.target.toLowerCase() === '_self') && form.checkValidity()) {
-            queueMicrotask(() => { if (!event.defaultPrevented) begin(); });
+            queueMicrotask(() => {
+                if (event.defaultPrevented) return;
+                win.dispatchEvent(new Event('iqams:navigating'));
+            });
         }
     });
 

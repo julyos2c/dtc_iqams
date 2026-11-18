@@ -49,10 +49,10 @@ class IdCardDownloadTest extends TestCase
         $this->assertMatchesRegularExpression('/^IQAMS-[A-Za-z0-9]{43}$/', $response->json('qr_code'));
         $this->assertNotSame('2026-0001', $response->json('qr_code'));
 
-        $this->get(route('student.qr'))
+        $this->get(route('student.profile'))
             ->assertOk()
-            ->assertSee('Download ID Card')
-            ->assertSee(route('id-card.show'), false);
+            ->assertSee('Download QR')
+            ->assertSee(route('student.profile.qr'), false);
     }
 
     public function test_instructor_payload_contains_teaching_fields_and_never_a_year_level(): void

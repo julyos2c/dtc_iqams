@@ -72,7 +72,7 @@ class QrAttendanceService
         $candidateDays = collect($candidateDates)
             ->map(fn (Carbon $date) => strtolower($date->format('l')))
             ->all();
-        $schedules = $this->eligibility->schedulesFor($student)->with(['subject', 'section'])
+        $schedules = $this->eligibility->schedulesFor($student, $scannedAt)->with(['subject', 'section'])
             ->whereIn('day', $candidateDays)
             ->get();
 
@@ -90,6 +90,7 @@ class QrAttendanceService
 
         $matches = $candidates
             ->reject(fn (array $candidate) => $this->eventResolver->affectingOccurrence($candidate['occurrence'], $eventContext))
+            ->reject(fn (array $candidate) => app(ClassCancellationService::class)->status($candidate['occurrence']) === 'approved')
             ->sortByDesc(fn (array $candidate) => [
                 $this->studentWindow->isPresent($candidate['occurrence'], $scannedAt) ? 1 : 0,
                 $candidate['occurrence']->startsAt->getTimestamp(),
@@ -97,6 +98,9 @@ class QrAttendanceService
             ->values();
 
         if ($matches->isEmpty()) {
+            if ($candidates->contains(fn (array $candidate) => app(ClassCancellationService::class)->status($candidate['occurrence']) === 'approved')) {
+                $this->deny('This class has been cancelled.');
+            }
             $nextSchedule = $schedules
                 ->map(fn (Schedule $schedule) => [
                     'schedule' => $schedule,
@@ -117,6 +121,10 @@ class QrAttendanceService
 
         $schedule = $matches->first()['schedule'];
         $occurrence = $matches->first()['occurrence'];
+        Schedule::whereKey($schedule->id)->lockForUpdate()->firstOrFail();
+        if (app(ClassCancellationService::class)->status($occurrence) === 'approved') {
+            $this->deny('This class has been cancelled.');
+        }
         $scanKey = implode(':', ['student', $user->id, $schedule->id, $scannedAt->toDateString()]);
 
         $existing = AttendanceLog::canonical()->where(function ($query) use ($scanKey, $user, $schedule, $occurrence) {

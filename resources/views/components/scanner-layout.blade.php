@@ -20,5 +20,6 @@
     <x-toast-notifications />
     {{ $slot }}
     <x-logout-confirmation />
+    <x-service-worker />
 </body>
 </html>

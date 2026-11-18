@@ -26,10 +26,4 @@ class StudentRecordsController extends Controller
         return view('student.attendance', compact('student', 'logs', 'summary', 'subjectAbsenceWarnings'));
     }
 
-    public function qr(Request $request): View
-    {
-        $student = $request->user()->student ?? abort(403, 'No student profile linked to this account.');
-
-        return view('student.qr', compact('student'));
-    }
 }

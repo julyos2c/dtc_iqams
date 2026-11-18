@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\ProfileImageService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
@@ -14,6 +15,18 @@ use Throwable;
 
 class StudentProfileController extends Controller
 {
+    public function qr(Request $request, \App\Services\QrCredentialService $credentials): JsonResponse
+    {
+        $this->student($request);
+        $credential = $request->user()->qrCredentials()->where('status', 'active')->first();
+
+        if (! $credential) {
+            return response()->json(['message' => 'No active QR code is assigned.'], 404)->header('Cache-Control', 'private, no-store');
+        }
+
+        return response()->json(['qr_code' => $credentials->plainText($credential)])->header('Cache-Control', 'private, no-store');
+    }
+
     public function show(Request $request): View
     {
         $student = $this->student($request);

@@ -25,8 +25,13 @@ class AttendanceAbsenceWriter
         $schedule = $occurrence->schedule;
         $absenceTime = $occurrence->presentUntil->addSecond();
         $attendanceDate = $this->keys->attendanceDate($absenceTime);
+        $excusedUsers = DB::table('student_excuse_decisions as decisions')
+            ->join('student_excuse_requests as requests', 'requests.id', '=', 'decisions.student_excuse_request_id')
+            ->where('decisions.schedule_id', $schedule->id)
+            ->whereDate('decisions.occurrence_date', $occurrence->sessionDate->toDateString())
+            ->where('decisions.status', 'approved')->pluck('requests.user_id')->flip();
 
-        $query = $this->eligibility->studentsForSchedule($schedule)
+        $query = $this->eligibility->studentsForSchedule($schedule, $occurrence->startsAt)
             ->join('users', 'users.id', '=', 'students.user_id')
             ->leftJoin('attendance_logs as existing', function (JoinClause $join) use ($schedule, $occurrence): void {
                 $join->on('existing.user_id', '=', 'students.user_id')
@@ -42,7 +47,8 @@ class AttendanceAbsenceWriter
             ->select(['students.id as student_id', 'students.user_id'])
             ->orderBy('students.id');
 
-        return $this->insertEligible($query, function (int $userId) use ($schedule, $event, $absenceTime, $attendanceDate): array {
+        return $this->insertEligible($query, function (int $userId) use ($schedule, $event, $absenceTime, $attendanceDate, $excusedUsers): array {
+            $approvedExcuse = $excusedUsers->has($userId);
             return [
                 'user_id' => $userId,
                 'schedule_id' => $schedule->id,
@@ -60,10 +66,10 @@ class AttendanceAbsenceWriter
                     'attendance_date' => $attendanceDate,
                 ]),
                 'record_state' => 'canonical',
-                'status' => $event ? 'excused' : 'absent',
+                'status' => $event || $approvedExcuse ? 'excused' : 'absent',
                 'remarks' => $event
                     ? "Class excused due to school event: {$event->title}."
-                    : 'Attendance marked as Absent.',
+                    : ($approvedExcuse ? 'Approved student excuse request.' : 'Attendance marked as Absent.'),
                 'created_at' => now(),
                 'updated_at' => now(),
             ];

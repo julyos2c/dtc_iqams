@@ -118,6 +118,39 @@ class MyProfileTest extends TestCase
         $this->assertTrue(Hash::check('New-password-123', $user->refresh()->password));
     }
 
+    public function test_instructor_settings_changes_password_and_rejects_an_incorrect_current_password(): void
+    {
+        $user = $this->userWithRole('instructor');
+        $this->actingAs($user)->get(route('instructor.settings'))
+            ->assertOk()->assertSee('Update Password');
+        $this->actingAs($user)->get(route('my-profile.edit'))
+            ->assertOk()->assertDontSee('Change password');
+
+        $data = ['current_password' => 'incorrect', 'password' => 'New-password-123', 'password_confirmation' => 'New-password-123'];
+        $this->actingAs($user)->put(route('password.update'), $data)
+            ->assertSessionHasErrors('current_password', null, 'updatePassword');
+        $this->assertTrue(Hash::check('password', $user->refresh()->password));
+
+        $data['current_password'] = 'password';
+        $this->actingAs($user)->put(route('password.update'), $data)->assertSessionHasNoErrors();
+        $this->assertTrue(Hash::check('New-password-123', $user->refresh()->password));
+    }
+
+    public function test_instructor_can_update_email_in_settings_and_see_it_on_profile(): void
+    {
+        $user = $this->userWithRole('instructor', ['email_verified_at' => now()]);
+        $other = $this->userWithRole('staff');
+
+        $this->actingAs($user)->patch(route('instructor.settings.email'), ['email' => $other->email])
+            ->assertSessionHasErrors('email');
+        $this->actingAs($user)->patch(route('instructor.settings.email'), ['email' => 'instructor@example.com'])
+            ->assertRedirect(route('instructor.settings'));
+
+        $this->assertSame('instructor@example.com', $user->refresh()->email);
+        $this->assertNull($user->email_verified_at);
+        $this->actingAs($user)->get(route('my-profile.edit'))->assertOk()->assertSee('instructor@example.com');
+    }
+
     public function test_replacing_an_avatar_deletes_the_old_file(): void
     {
         Storage::fake('public');

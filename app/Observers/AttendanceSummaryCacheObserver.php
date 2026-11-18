@@ -13,6 +13,7 @@ use App\Models\SchoolEvent;
 use App\Models\SchoolEventTarget;
 use App\Models\Section;
 use App\Models\Student;
+use App\Models\StudentScheduleEnrollment;
 use App\Models\Subject;
 use App\Models\User;
 use App\Services\AttendanceSummaryCache;
@@ -38,6 +39,11 @@ class AttendanceSummaryCacheObserver
         $cache = app(AttendanceSummaryCache::class);
 
         $this->afterCommit(function () use ($cache, $model): void {
+            if ($model instanceof StudentScheduleEnrollment) {
+                $cache->invalidateStudentContext();
+
+                return;
+            }
             if ($model instanceof AttendanceLog) {
                 $cache->invalidateAttendance((int) $model->user_id);
 

@@ -30,14 +30,17 @@ class StudentAbsenceWarningTest extends TestCase
 
         $fifth = $this->createLog($user, $schedule, 5, 'absent');
         $this->get(route('student.dashboard'))->assertOk()
-            ->assertSee('Attendance warning')->assertSee('CAP2')->assertSee('5 absences')
-            ->assertSee('No scan recorded')->assertDontSee('time in');
+            ->assertSee('Attendance warning')->assertSee('CAP2')->assertSee('absences')
+            ->assertViewHas('subjectAbsenceWarnings', fn ($warnings) => (int) $warnings->first()->absence_count === 5)
+            ->assertSee('—')->assertDontSee('time in');
         $this->get(route('student.attendance'))->assertOk()
-            ->assertSee('Attendance warning')->assertSee('CAP2')->assertSee('5 absences')
-            ->assertSee('No scan recorded')->assertDontSee('time in');
+            ->assertSee('Attendance warning')->assertSee('CAP2')->assertSee('absences')
+            ->assertViewHas('subjectAbsenceWarnings', fn ($warnings) => (int) $warnings->first()->absence_count === 5)
+            ->assertSee('No scan')->assertSee('recorded')->assertDontSee('time in');
 
         $this->createLog($user, $schedule, 6, 'absent');
-        $this->get(route('student.dashboard'))->assertSee('6 absences');
+        $this->get(route('student.dashboard'))->assertSee('absences')
+            ->assertViewHas('subjectAbsenceWarnings', fn ($warnings) => (int) $warnings->first()->absence_count === 6);
 
         $fifth->update(['status' => 'present']);
         $this->assertSame(5, app(StudentAbsenceWarningService::class)->forStudent($student)->first()->absence_count);

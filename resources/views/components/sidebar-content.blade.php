@@ -82,6 +82,18 @@
             </x-slot>
         </x-sidebar-link>
 
+        @php($pendingCancellations = \App\Models\ClassCancellationRequest::where('status', 'pending')->count())
+        <x-sidebar-link :href="route('admin.class-cancellations.index')" :active="request()->routeIs('admin.class-cancellations.*')" :collapsible="$collapsible" label="Class Cancellations">
+            <x-slot name="icon">
+                <span class="relative shrink-0">
+                    <x-heroicon-o-calendar class="h-5 w-5" />
+                    @if ($pendingCancellations)
+                        <span class="absolute -right-2 -top-2 grid min-h-4 min-w-4 place-items-center rounded-full bg-rose-600 px-1 text-[9px] font-bold text-white" aria-label="{{ $pendingCancellations }} pending class cancellation requests">{{ $pendingCancellations > 99 ? '99+' : $pendingCancellations }}</span>
+                    @endif
+                </span>
+            </x-slot>
+        </x-sidebar-link>
+
         <x-sidebar-link :href="route('attendance-logs.index')" :active="request()->routeIs('attendance-logs.*')" :collapsible="$collapsible" label="Attendance Logs">
             <x-slot name="icon">
                 <x-heroicon-o-check-badge class="w-5 h-5 shrink-0" aria-hidden="true" />
@@ -93,6 +105,9 @@
         <x-sidebar-link :href="route('admin.reports.daily-personnel.index')" :active="request()->routeIs('admin.reports.daily-personnel.*')" :collapsible="$collapsible" label="Personnel Attendance">
             <x-slot name="icon"><x-heroicon-o-document-chart-bar class="h-5 w-5" /></x-slot>
         </x-sidebar-link>
+        <x-sidebar-link :href="route('admin.reports.student-absences.index')" :active="request()->routeIs('admin.reports.student-absences.*')" :collapsible="$collapsible" label="Student Absences">
+            <x-slot name="icon"><x-heroicon-o-academic-cap class="h-5 w-5" /></x-slot>
+        </x-sidebar-link>
         <div class="px-3 pt-5 pb-2" @if ($collapsible) x-show="!sidebarCollapsed" x-cloak @endif>
             <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">User Management</p>
         </div>
@@ -101,7 +116,7 @@
                 <x-heroicon-o-users class="w-5 h-5 shrink-0" aria-hidden="true" />
             </x-slot>
         </x-sidebar-link>
-        <x-sidebar-link :href="route('students.index')" :active="request()->routeIs('students.*')" :collapsible="$collapsible" label="Manage Student">
+        <x-sidebar-link :href="route('students.index')" :active="request()->routeIs('students.*', 'admin.students.submissions', 'admin.enrollment-requests.*')" :collapsible="$collapsible" label="Manage Student">
             <x-slot name="icon">
                 <x-heroicon-o-academic-cap class="w-5 h-5 shrink-0" aria-hidden="true" />
             </x-slot>
@@ -119,11 +134,6 @@
         <div class="px-3 pt-5 pb-2" @if ($collapsible) x-show="!sidebarCollapsed" x-cloak @endif>
             <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">Academic Management</p>
         </div>
-        <x-sidebar-link :href="route('schedules.index')" :active="request()->routeIs('schedules.*')" :collapsible="$collapsible" label="Manage Schedule">
-            <x-slot name="icon">
-                <x-heroicon-o-calendar class="w-5 h-5 shrink-0" aria-hidden="true" />
-            </x-slot>
-        </x-sidebar-link>
         <x-sidebar-link :href="route('departments.index')" :active="request()->routeIs('departments.*')" :collapsible="$collapsible" label="Manage Department">
             <x-slot name="icon">
                 <x-heroicon-o-building-office-2 class="w-5 h-5 shrink-0" aria-hidden="true" />
@@ -142,6 +152,11 @@
         <x-sidebar-link :href="route('sections.index')" :active="request()->routeIs('sections.*')" :collapsible="$collapsible" label="Manage Section">
             <x-slot name="icon">
                 <x-heroicon-o-view-columns class="w-5 h-5 shrink-0" aria-hidden="true" />
+            </x-slot>
+        </x-sidebar-link>
+        <x-sidebar-link :href="route('schedules.index')" :active="request()->routeIs('schedules.*')" :collapsible="$collapsible" label="Manage Schedule">
+            <x-slot name="icon">
+                <x-heroicon-o-calendar class="w-5 h-5 shrink-0" aria-hidden="true" />
             </x-slot>
         </x-sidebar-link>
         <div class="px-3 pt-5 pb-2" @if ($collapsible) x-show="!sidebarCollapsed" x-cloak @endif>

@@ -9,7 +9,7 @@
     <div class="space-y-6 p-4 sm:p-6">
         <form method="GET" action="{{ route('admin.audit-logs.index') }}"
             class="grid gap-x-5 gap-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-2 lg:grid-cols-3">
-            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Action
+            <label class="block text-xs font-normal uppercase tracking-wide text-slate-500">Action
                 <select name="action" class="mt-2 h-10 w-full rounded-lg border-slate-300 px-3 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                     <option value="">All actions</option>
                     @foreach ($actions as $actionValue => $actionLabel)
@@ -17,7 +17,7 @@
                     @endforeach
                 </select>
             </label>
-            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Performed by
+            <label class="block text-xs font-normal uppercase tracking-wide text-slate-500">Performed by
                 <select name="actor_id" class="mt-2 h-10 w-full rounded-lg border-slate-300 px-3 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                     <option value="">All users and system actions</option>
                     @foreach ($actors as $actor)
@@ -25,7 +25,7 @@
                     @endforeach
                 </select>
             </label>
-            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Affected record type
+            <label class="block text-xs font-normal uppercase tracking-wide text-slate-500">Affected record type
                 <select name="subject_type" class="mt-2 h-10 w-full rounded-lg border-slate-300 px-3 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                     <option value="">All record types</option>
                     @foreach ($subjectTypes as $typeValue => $typeLabel)
@@ -33,22 +33,22 @@
                     @endforeach
                 </select>
             </label>
-            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Record reference
+            <label class="block text-xs font-normal uppercase tracking-wide text-slate-500">Record reference
                 <input name="subject_id" value="{{ $filters['subject_id'] ?? '' }}" type="number" min="1"
                     placeholder="Optional reference" class="mt-2 h-10 w-full rounded-lg border-slate-300 px-3 text-sm text-slate-700 shadow-sm placeholder:text-slate-400 focus:border-indigo-500 focus:ring-indigo-500">
             </label>
-            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">From
+            <label class="block text-xs font-normal uppercase tracking-wide text-slate-500">From
                 <input name="from" value="{{ $filters['from'] ?? '' }}" type="date"
                     class="mt-2 h-10 w-full rounded-lg border-slate-300 px-3 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
             </label>
-            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">To
+            <label class="block text-xs font-normal uppercase tracking-wide text-slate-500">To
                 <input name="to" value="{{ $filters['to'] ?? '' }}" type="date"
                     class="mt-2 h-10 w-full rounded-lg border-slate-300 px-3 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
             </label>
             <div class="flex items-end justify-end gap-2 sm:col-span-2 lg:col-span-3">
                 <a href="{{ route('admin.audit-logs.index') }}"
-                    class="inline-flex h-10 items-center rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Reset</a>
-                <button class="h-10 rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Filter</button>
+                    class="inline-flex h-10 items-center rounded-lg border border-slate-300 px-4 text-sm font-normal text-slate-600 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Reset</a>
+                <button class="h-10 rounded-lg bg-indigo-600 px-4 text-sm font-normal text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Filter</button>
             </div>
         </form>
 

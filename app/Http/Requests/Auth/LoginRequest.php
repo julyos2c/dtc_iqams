@@ -49,7 +49,6 @@ class LoginRequest extends FormRequest
         ], $this->boolean('remember'))) {
             RateLimiter::hit($this->throttleKey());
             app(AuditLogger::class)->record('auth.login_failed', null, [
-                'username' => $this->string('user_id')->toString(),
                 'reason' => 'invalid_credentials',
             ], null, $this);
 
@@ -61,7 +60,6 @@ class LoginRequest extends FormRequest
         if (! Auth::user()->isAccountActive()) {
             $inactiveUser = Auth::user();
             app(AuditLogger::class)->record('auth.login_failed', $inactiveUser, [
-                'username' => $this->string('user_id')->toString(),
                 'reason' => 'inactive_account',
             ], null, $this);
             Auth::logout();
@@ -88,7 +86,6 @@ class LoginRequest extends FormRequest
 
         event(new Lockout($this));
         app(AuditLogger::class)->record('auth.lockout', null, [
-            'username' => $this->string('user_id')->toString(),
             'reason' => 'rate_limited',
         ], null, $this);
 

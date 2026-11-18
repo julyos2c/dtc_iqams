@@ -95,3 +95,25 @@ and school events are archived or cancelled. Attendance, leave, QR history,
 scan audits, and audit logs are never physically deleted by the application.
 No automated purge job is installed. Any future retention purge requires a
 separate approved institutional policy and migration.
+
+General audit logs reject Eloquent instance and common bulk modifications,
+but direct query-builder/SQL access, privileged database operations, foreign-key
+actions and migration rollback can still alter history. The hosting review,
+privilege separation, attribution limitations and recovery procedure are in
+`docs/audit-database-protection.md`; model guards do not establish database-level
+immutability. Production grants and hosting support remain unverified.
+
+Scan audits include the request IP address, user agent, terminal location and
+other event details. Treat these as potentially identifying security records:
+restrict access to authorized personnel, include their collection and security
+purpose in the institutional privacy notice, and protect exports and backups.
+The repository does not specify an approved retention period for these fields;
+they currently remain with the scan audit, including in backups, until an
+institutional schedule and a reviewed disposal procedure are approved. Do not
+apply the backup rotation schedule as a retention period for live audit data.
+
+Scan audits are not currently protected by model-level append-only guards or
+verified database-level immutability. Restrict database write access and do
+not describe them as immutable. IP addresses can be shared or affected by
+proxies and are not conclusive proof of identity or location; configure trusted
+proxies for the actual deployment and verify the recorded address.

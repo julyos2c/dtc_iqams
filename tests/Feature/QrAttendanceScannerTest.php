@@ -879,6 +879,24 @@ class QrAttendanceScannerTest extends TestCase
             ->where('schedule_id', $schedule->id)->count());
     }
 
+    public function test_class_cancellation_keeps_pending_scan_open_and_blocks_approved_scan(): void
+    {
+        [$student, $schedule] = $this->studentWithSchedule();
+        $teacher = $schedule->instructor->user;
+        $service = app(\App\Services\ClassCancellationService::class);
+        $request = $service->submit($schedule, Carbon::parse('2026-08-10'), 'Unavailable', $teacher);
+        $scan = app(\App\Services\QrAttendanceService::class)->record('STU-001', null, Carbon::parse('2026-08-10 08:10:00', 'Asia/Manila'));
+        $this->assertSame($student->id, $scan->user_id);
+        $service->review($request, 'approved', null, User::factory()->create());
+        try {
+            app(\App\Services\QrAttendanceService::class)->record('STU-001', null, Carbon::parse('2026-08-10 08:11:00', 'Asia/Manila'));
+            $this->fail('Cancelled class must reject scans.');
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            $this->assertStringContainsString('cancelled', $exception->getMessage());
+        }
+        $this->assertDatabaseHas('attendance_logs', ['id' => $scan->id, 'status' => 'present']);
+    }
+
     private function studentWithSchedule(): array
     {
         $department = Department::create(['department_code' => 'IT', 'department_name' => 'Information Technology']);

@@ -17,6 +17,8 @@ class DailyPersonnelAttendanceReportFilters
     {
         $filters = $request->validate([
             'date' => ['nullable', 'date_format:Y-m-d'],
+            'month' => ['nullable', 'date_format:Y-m'],
+            'period' => ['nullable', Rule::in(['daily', 'monthly'])],
             'personnel_type' => ['nullable', Rule::in(['instructor', 'staff'])],
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'office_unit_id' => ['nullable', 'integer', 'exists:office_units,id'],
@@ -37,10 +39,10 @@ class DailyPersonnelAttendanceReportFilters
 
         $date = Carbon::createFromFormat(
             'Y-m-d',
-            $filters['date'] ?? today()->toDateString(),
+            (($filters['period'] ?? 'daily') === 'monthly' ? (($filters['month'] ?? today()->format('Y-m')).'-01') : ($filters['date'] ?? today()->toDateString())),
             config('app.timezone'),
         )->startOfDay();
-        unset($filters['date']);
+        unset($filters['date'], $filters['month'], $filters['period']);
 
         return [$date, array_filter($filters, fn ($value) => $value !== null && $value !== '')];
     }

@@ -1,13 +1,16 @@
 <x-app-layout>
     <x-slot name="header">
         <div class="no-print">
-            <h1 class="text-2xl font-bold tracking-tight text-gray-900">Daily Personnel Attendance</h1>
-            <p class="mt-1 text-sm text-gray-500">Combined daily attendance for teaching and non-teaching personnel.</p>
+            <h1 class="text-2xl font-bold tracking-tight text-gray-900">Personnel Attendance Reports</h1>
+            <p class="mt-1 text-sm text-gray-500">Daily and monthly attendance for teaching and non-teaching personnel.</p>
         </div>
     </x-slot>
 
     <style>
         .attendance-document { box-sizing: border-box; background: #fff; color: #111827; padding: 2rem; }
+        .report-preview { overflow-x: auto; }
+        .attendance-table { min-width: 720px; }
+        @media (max-width: 640px) { .attendance-document { padding: 1rem; } .report-signatures { min-width: 720px; } }
         .report-heading { margin-bottom: 1.5rem; text-align: center; }
         .report-heading h2 { font-size: 1.2rem; font-weight: 700; letter-spacing: .04em; }
         .report-heading h3 { margin-top: .25rem; font-size: 1.05rem; font-weight: 700; }
@@ -32,10 +35,10 @@
             aside, body > div > div.lg\:hidden, #app-content > header, .no-print, [role="status"] { display: none !important; }
             *, *::before, *::after { box-sizing: border-box; }
             .report-shell { width: 100% !important; margin: 0 !important; padding: 0 !important; max-width: none !important; }
-            .report-shell > .overflow-hidden { overflow: visible !important; border-radius: 0 !important; box-shadow: none !important; }
+            .report-shell > .report-preview { overflow: visible !important; border-radius: 0 !important; box-shadow: none !important; }
             .attendance-document { width: 100%; padding: 0; box-shadow: none !important; }
             .report-heading { margin-bottom: 6mm; }
-            .attendance-table { width: 100%; font-size: 10pt; }
+            .attendance-table { width: 100%; min-width: 0; font-size: 10pt; }
             .attendance-table th, .attendance-table td { padding: 3.5mm 2.5mm; }
             .attendance-table td:not(:first-child) { white-space: nowrap; }
             .attendance-table thead { display: table-header-group; }
@@ -44,13 +47,27 @@
         }
     </style>
 
-    <div class="report-shell mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <form method="GET" action="{{ route('admin.reports.daily-personnel.index') }}" data-report-filter class="no-print mb-6 rounded-lg bg-white p-5 shadow-sm">
+    <div @if(request()->query('print') === '1') x-data x-init="$nextTick(() => window.print())" @endif class="report-shell mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <form method="GET" action="{{ route('admin.reports.daily-personnel.index') }}" data-report-filter x-data="{ period: '{{ $monthly ? 'monthly' : 'daily' }}' }" class="no-print mb-6 rounded-lg bg-white p-5 shadow-sm">
+            <fieldset class="mb-5 border-b border-gray-100 pb-5">
+                <legend class="mb-2 text-sm font-semibold text-gray-700">Report period</legend>
+                <div class="flex flex-wrap gap-3">
+                    <label class="flex cursor-pointer items-center gap-2 rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700"><input type="radio" name="period" value="daily" x-model="period" @checked(!$monthly)> Daily</label>
+                    <label class="flex cursor-pointer items-center gap-2 rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700"><input type="radio" name="period" value="monthly" x-model="period" @checked($monthly)> Monthly</label>
+                </div>
+            </fieldset>
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                 <div>
-                    <label for="date" class="mb-1 block text-sm font-medium text-gray-700">Date</label>
-                    <input id="date" type="date" name="date" value="{{ $date->toDateString() }}" class="w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                    @error('date')<p class="mt-1 text-xs text-red-600">{{ $message }}</p>@enderror
+                    <div x-show="period === 'monthly'" @if(!$monthly) style="display: none" @endif>
+                        <label for="month" class="mb-1 block text-sm font-medium text-gray-700">Month</label>
+                        <input id="month" type="month" name="month" value="{{ $date->format('Y-m') }}" class="w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        @error('month')<p class="mt-1 text-xs text-red-600">{{ $message }}</p>@enderror
+                    </div>
+                    <div x-show="period === 'daily'" @if($monthly) style="display: none" @endif>
+                        <label for="date" class="mb-1 block text-sm font-medium text-gray-700">Date</label>
+                        <input id="date" type="date" name="date" value="{{ $date->toDateString() }}" class="w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        @error('date')<p class="mt-1 text-xs text-red-600">{{ $message }}</p>@enderror
+                    </div>
                 </div>
                 <div>
                     <label for="personnel_type" class="mb-1 block text-sm font-medium text-gray-700">Personnel Type</label>
@@ -98,18 +115,20 @@
             <div class="mt-5 flex flex-wrap items-center gap-3">
                 <button type="submit" class="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">Generate Report</button>
                 <a href="{{ route('admin.reports.daily-personnel.index') }}" class="text-sm text-gray-600 hover:text-gray-900">Reset</a>
-                <div class="ml-auto flex flex-wrap gap-2">
+                <div class="flex w-full flex-wrap gap-2 sm:ml-auto sm:w-auto">
+                    @if (!$monthly)
                     @foreach(['pdf' => 'Export PDF', 'xlsx' => 'Export Excel'] as $format => $label)
-                        <button type="button" data-report-export-format="{{ $format }}" data-report-export-url="{{ route('admin.reports.daily-personnel.exports.store') }}" class="rounded border px-4 py-2 text-sm font-medium {{ $format === 'pdf' ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100' : 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100' }}">{{ $label }}</button>
+                        <button type="button" x-show="period === 'daily'" data-report-export-format="{{ $format }}" data-report-export-url="{{ route('admin.reports.daily-personnel.exports.store') }}" class="rounded border px-4 py-2 text-sm font-medium {{ $format === 'pdf' ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100' : 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100' }}">{{ $label }}</button>
                     @endforeach
-                    <button type="button" onclick="window.print()" class="rounded border border-gray-300 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200">Print</button>
+                    @endif
+                    <button type="submit" name="print" value="1" class="rounded border border-gray-300 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200">Print</button>
                 </div>
             </div>
             <div data-report-export-status class="mt-3 text-sm text-gray-600" aria-live="polite"></div>
         </form>
 
-        <div class="overflow-hidden rounded-lg bg-white shadow-sm">
-            @include('reports.daily-personnel._report')
+        <div class="report-preview rounded-lg bg-white shadow-sm">
+            @include($monthly ? 'reports.daily-personnel._monthly' : 'reports.daily-personnel._report')
         </div>
     </div>
 

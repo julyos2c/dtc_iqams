@@ -113,10 +113,11 @@ class NonTeachingStaffController extends Controller
             throw $exception;
         }
 
+        $emailSent = app(\App\Services\AccountCredentialsSender::class)->send($user, $temporaryPassword);
         app(AuditLogger::class)->record('account.created', $user, ['role' => 'staff'], $administrator, $request);
 
         return redirect()->route('non-teaching-staff.index')
-            ->with('success', 'Account created successfully.')
+            ->with('success', $emailSent ? 'Account created and credentials email sent.' : 'Account created, but the credentials email could not be sent. Provide the temporary password privately.')
             ->with('keep_create_modal_open', true)
             ->with('generated_password', $temporaryPassword);
 

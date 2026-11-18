@@ -51,6 +51,41 @@ class StudentAttendanceSummaryTest extends TestCase
         $this->seed(RolePermissionSeeder::class);
     }
 
+    public function test_admin_can_view_student_absence_totals(): void
+    {
+        [$student, $schedule] = $this->fixture();
+        $this->log($student->user, $schedule, Carbon::parse('2026-08-03 09:00', 'Asia/Manila'), 'absent');
+        $voided = $this->log($student->user, $schedule, Carbon::parse('2026-08-10 09:00', 'Asia/Manila'), 'absent');
+        $voided->update(['record_state' => 'voided']);
+        $admin = User::factory()->create(['role_id' => Role::findByName('admin', 'web')->id]);
+
+        $this->actingAs($admin)->get(route('admin.reports.student-absences.index'))
+            ->assertOk()->assertSee('Student Absences')->assertSee('SUM-STU')
+            ->assertViewHas('summary', fn ($summary) => (int) $summary->absences === 1 && (int) $summary->affected === 1);
+        $this->get(route('admin.reports.student-absences.details', $student))->assertOk()->assertJsonCount(1, 'records');
+        $this->get(route('admin.reports.student-absences.index', ['search' => 'missing']))->assertOk()->assertDontSee('SUM-STU');
+        $this->get(route('admin.reports.student-absences.export', ['type' => 'detailed']))->assertOk()->assertHeader('content-type', 'application/pdf');
+        $this->assertDatabaseHas('audit_logs', ['action' => 'report.student_absences_exported', 'actor_id' => $admin->id]);
+        $this->actingAs($student->user)->get(route('admin.reports.student-absences.index'))->assertForbidden();
+        $this->get(route('admin.reports.student-absences.export'))->assertForbidden();
+    }
+
+    public function test_absence_report_risk_is_per_subject_and_filters_change_totals(): void
+    {
+        [$student, $schedule] = $this->fixture();
+        $otherSubject = Subject::create(['subject_code' => 'SUM102', 'subject_name' => 'Other Subject', 'units' => 3]);
+        $otherSchedule = Schedule::create(['subject_id' => $otherSubject->id, 'instructor_id' => $schedule->instructor_id, 'section_id' => $schedule->section_id, 'day' => 'tuesday', 'start_time' => '08:00', 'end_time' => '10:00', 'room' => 'Room 2']);
+        foreach (range(0, 2) as $week) $this->log($student->user, $schedule, Carbon::parse('2026-08-03 09:00', 'Asia/Manila')->addWeeks($week), 'absent');
+        foreach (range(0, 1) as $week) $this->log($student->user, $otherSchedule, Carbon::parse('2026-08-04 09:00', 'Asia/Manila')->addWeeks($week), 'absent');
+        $admin = User::factory()->create(['role_id' => Role::findByName('admin', 'web')->id]);
+        $this->actingAs($admin)->get(route('admin.reports.student-absences.index'))
+            ->assertOk()->assertViewHas('summary', fn ($s) => (int) $s->absences === 5 && (int) $s->at_risk === 0);
+        $this->get(route('admin.reports.student-absences.index', ['subject' => $otherSubject->id, 'from' => '2026-08-10']))
+            ->assertOk()->assertViewHas('summary', fn ($s) => (int) $s->absences === 1);
+        $this->get(route('admin.reports.student-absences.index', ['risk' => 'at-risk']))
+            ->assertOk()->assertViewHas('summary', fn ($s) => (int) $s->affected === 0);
+    }
+
     public function test_present_and_late_are_attended_while_absent_is_rated_and_excused_is_excluded(): void
     {
         [$student, $schedule] = $this->fixture();
@@ -93,7 +128,7 @@ class StudentAttendanceSummaryTest extends TestCase
         $this->assertSame(66.67, $summary['percentage']);
     }
 
-    public function test_archived_schedule_records_are_not_counted_as_scheduled_attendance(): void
+    public function test_archived_schedule_records_remain_in_historical_attendance(): void
     {
         [$student, $schedule] = $this->fixture();
         $schedule->update(['archived_at' => now()]);
@@ -101,11 +136,11 @@ class StudentAttendanceSummaryTest extends TestCase
 
         $summary = app(StudentAttendanceSummary::class)->forStudent($student->fresh());
 
-        $this->assertSame(0, $summary['scheduled']);
-        $this->assertSame(0.0, $summary['percentage']);
+        $this->assertSame(1, $summary['scheduled']);
+        $this->assertSame(100.0, $summary['percentage']);
     }
 
-    public function test_completed_same_day_schedules_without_logs_are_counted_as_absent(): void
+    public function test_current_schedules_do_not_infer_historical_absences(): void
     {
         [$student, $schedule] = $this->fixture();
         Schedule::create([
@@ -132,9 +167,19 @@ class StudentAttendanceSummaryTest extends TestCase
         $summary = app(StudentAttendanceSummary::class)->forStudent($student->fresh());
 
         $this->assertSame(1, $summary['attended']);
-        $this->assertSame(2, $summary['absent']);
-        $this->assertSame(3, $summary['scheduled']);
-        $this->assertSame(33.33, $summary['percentage']);
+        $this->assertSame(0, $summary['absent']);
+        $this->assertSame(1, $summary['scheduled']);
+        $this->assertSame(100.0, $summary['percentage']);
+    }
+
+    public function test_recorded_history_survives_section_and_enrollment_changes(): void
+    {
+        [$student, $schedule] = $this->fixture();
+        $this->log($student->user, $schedule, Carbon::parse('2026-08-03 08:05', 'Asia/Manila'), 'present');
+        $student->update(['section_id' => null, 'enrollment_type' => 'irregular']);
+        $summary = app(StudentAttendanceSummary::class)->forStudent($student->fresh());
+        $this->assertSame(1, $summary['attended']);
+        $this->assertSame(0, $summary['absent']);
     }
 
     public function test_cached_summary_is_invalidated_when_attendance_is_created(): void
@@ -167,9 +212,9 @@ class StudentAttendanceSummaryTest extends TestCase
             $overview = app(StudentAttendanceSummary::class)->overviewForStudent($student->fresh());
 
             $this->assertSame([
-                ['label' => 'Week 1', 'percentage' => 100.0],
-                ['label' => 'Week 2', 'percentage' => 0.0],
-                ['label' => 'Week 3', 'percentage' => 100.0],
+                ['label' => 'Week 1', 'percentage' => 100.0, 'attended' => 1, 'scheduled' => 1],
+                ['label' => 'Week 2', 'percentage' => 0.0, 'attended' => 0, 'scheduled' => 1],
+                ['label' => 'Week 3', 'percentage' => 100.0, 'attended' => 1, 'scheduled' => 1],
             ], $overview['semester']);
         } finally {
             Carbon::setTestNow();

@@ -110,10 +110,12 @@ class RecurringScheduleUpdateTest extends TestCase
     public function test_single_day_edit_only_updates_that_schedule(): void
     {
         $single = $this->group(['monday'])->first();
+        $originalGroupId = $single->recurring_schedule_group_id;
 
         $this->update($single, ['room' => 'Room 303'])->assertSessionHasNoErrors();
 
         $this->assertSame('Room 303', $single->fresh()->room);
+        $this->assertSame($originalGroupId, $single->fresh()->recurring_schedule_group_id);
         $this->assertSame(1, Schedule::count());
     }
 
@@ -121,6 +123,12 @@ class RecurringScheduleUpdateTest extends TestCase
     {
         $group = $this->group(['monday', 'wednesday', 'friday']);
         $originalGroupId = $group->first()->recurring_schedule_group_id;
+        $student = \App\Models\Student::create([
+            'user_id' => User::factory()->create()->id, 'student_no' => 'SPLIT-001',
+            'first_name' => 'Enrolled', 'last_name' => 'Student', 'course_id' => $this->section->course_id,
+            'section_id' => $this->section->id, 'enrollment_type' => 'irregular', 'status' => 'active',
+        ]);
+        $enrollment = $student->scheduleEnrollments()->create(['recurring_schedule_group_id' => $originalGroupId]);
 
         $this->update($group->first(), [
             'start_time' => '11:00',
@@ -130,6 +138,10 @@ class RecurringScheduleUpdateTest extends TestCase
 
         $monday = $group->first()->fresh();
         $this->assertNotSame($originalGroupId, $monday->recurring_schedule_group_id);
+        $this->assertDatabaseHas('student_schedule_enrollments', ['id' => $enrollment->id]);
+        $this->assertDatabaseHas('student_schedule_enrollments', [
+            'student_id' => $student->id, 'recurring_schedule_group_id' => $monday->recurring_schedule_group_id,
+        ]);
         $this->assertSame('11:00', substr($monday->start_time, 0, 5));
         $this->assertCount(2, Schedule::where('recurring_schedule_group_id', $originalGroupId)->get());
         $this->assertTrue(Schedule::where('recurring_schedule_group_id', $originalGroupId)->get()
@@ -163,7 +175,8 @@ class RecurringScheduleUpdateTest extends TestCase
 
         $this->actingAs($this->admin)->get(route('schedules.index'))
             ->assertOk()
-            ->assertSee('Apply changes to all recurring schedules')
+            ->assertSee('Apply changes to all')
+            ->assertSee('recurring schedules')
             ->assertSee('Changes will apply to', false);
 
         $instructorUser = $this->instructor->user;
@@ -172,6 +185,14 @@ class RecurringScheduleUpdateTest extends TestCase
             return $groups->count() === 2
                 && $groups->contains(fn (array $group) => count($group['days']) === $first->count());
         });
+    }
+
+    public function test_instructor_schedule_excludes_archived_offerings(): void
+    {
+        $schedule = $this->group(['monday'])->first();
+        $schedule->update(['archived_at' => now()]);
+        $this->actingAs($this->instructor->user)->get(route('instructor.schedule'))
+            ->assertOk()->assertViewHas('scheduleGroups', fn ($groups) => $groups->isEmpty());
     }
 
     private function update(Schedule $schedule, array $changes)

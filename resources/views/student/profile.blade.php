@@ -1,41 +1,68 @@
-<x-student-layout title="Student Profile">
-    <div class="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <div>
-            <h2 class="text-lg font-semibold text-slate-900">Student information</h2>
-            <p class="mt-1 text-sm text-slate-500">Academic details are maintained by the administration and cannot be
-                edited here.</p>
-        </div><a href="{{ route('student.settings') }}#photo"
-            class="inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800">Change
-            profile photo</a>
-    </div>
-    <section class="border border-slate-200 bg-white">
-        <div class="flex items-center gap-4 border-b border-slate-200 p-5 sm:p-6">
-            <div class="h-16 w-16 shrink-0 overflow-hidden rounded-full bg-teal-100 text-teal-800">
-                @if (Auth::user()->avatar_url)
-                    <img src="{{ Auth::user()->avatar_url }}" class="h-full w-full object-cover"
-                    alt="Current profile photo">@else<div
-                        class="grid h-full place-items-center text-xl font-semibold">
-                        {{ strtoupper(substr($student->first_name, 0, 1)) }}</div>
-                @endif
-            </div>
-            <div class="min-w-0">
-                <h3 class="truncate text-lg font-semibold text-slate-900">{{ $student->fullName() }}</h3>
-                <p class="font-mono text-sm text-slate-500">{{ $student->student_no }}</p>
-                <div class="mt-1"><x-student-status :status="Auth::user()->status" /></div>
-            </div>
-        </div>
-        @php $details=['Student number'=>$student->student_no,'Full name'=>$student->fullName(),'Enrollment type'=>ucfirst($student->enrollment_type),'Course'=>trim(($student->course?->course_code ?? '').' - '.($student->course?->course_name ?? ''),' -') ?: 'Not assigned','Year level'=>$student->year_level ? 'Year '.$student->year_level : 'Not assigned','Section'=>$student->section?->section_name ?? 'Not assigned','Department'=>$student->course?->department?->department_name ?? 'Not assigned','Email'=>Auth::user()->email,'Contact number'=>$student->contact_number ?: 'Not provided']; @endphp
-        <dl class="grid sm:grid-cols-2 xl:grid-cols-3">
-            @foreach ($details as $label => $value)
-                <div class="border-b border-slate-200 px-5 py-4 sm:border-r sm:px-6">
-                    <dt class="text-xs font-semibold uppercase tracking-wide text-slate-400">{{ $label }}</dt>
-                    <dd class="mt-1.5 text-sm font-medium text-slate-800">{{ $value }}</dd>
+﻿<x-student-layout title="Student Profile">
+    @php
+        $course = trim(($student->course?->course_code ?? '').' - '.($student->course?->course_name ?? ''), ' -') ?: 'Not assigned';
+        $department = $student->course?->department?->department_name ?? 'Not assigned';
+        $details = [
+            ['Course', $course, 'book-open'],
+            ['Year Level', $student->year_level ? 'Year '.$student->year_level : 'Not assigned', 'square-3-stack-3d'],
+            ['Section', $student->section?->section_name ?? 'Not assigned', 'user-group'],
+            ['Department', $department, 'building-library'],
+            ['Enrollment Type', $student->enrollment_type ? ucfirst($student->enrollment_type) : 'Not assigned', 'clipboard-document-list'],
+        ];
+    @endphp
+    <div x-data="studentProfileQr" data-qr-url="{{ route('student.profile.qr') }}" data-student-number="{{ $student->student_no }}" class="space-y-4 sm:space-y-6">
+        <section class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-teal-950 via-teal-800 to-emerald-600 text-white shadow-lg">
+            <div class="absolute inset-0 bg-cover bg-center opacity-10" style="background-image: url('{{ asset('images/dtc-building.jpg') }}')"></div>
+            <div class="relative flex min-w-0 flex-col gap-4 p-4 sm:gap-6 sm:p-8 xl:flex-row xl:items-center">
+                <div class="flex min-w-0 flex-1 flex-col items-center gap-2 text-center sm:flex-row sm:gap-5 sm:text-left">
+                    <div class="relative shrink-0">
+                        <div class="grid h-[88px] w-[88px] place-items-center overflow-hidden rounded-full border-4 border-white bg-teal-100 text-3xl font-semibold text-teal-900 sm:h-32 sm:w-32 sm:text-5xl">
+                            @if (Auth::user()->avatar_url)
+                                <img src="{{ Auth::user()->avatar_url }}" alt="Current profile photo" class="h-full w-full object-cover">
+                            @else
+                                {{ strtoupper(substr($student->first_name, 0, 1)) }}
+                            @endif
+                        </div>
+                        <form method="POST" action="{{ route('student.profile.photo') }}" enctype="multipart/form-data" class="absolute bottom-0 right-0">
+                            @csrf
+                            @method('PUT')
+                            <input id="profile-avatar" name="avatar" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" x-ref="avatarInput" @change="if ($event.target.files.length) $el.form.requestSubmit()">
+                            <button type="button" @click="$refs.avatarInput.click()" aria-label="Change profile photo" title="Change profile photo" class="grid h-11 w-11 place-items-center rounded-full border-2 border-white bg-teal-950 text-white hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-teal-900"><x-heroicon-o-camera class="h-5 w-5" /></button>
+                        </form>
+                    </div>
+                    <div class="min-w-0">
+                        <h2 class="break-words text-xl font-bold sm:text-3xl">{{ $student->fullName() }}</h2>
+                        <span @class(['mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold sm:mt-3', 'bg-emerald-100 text-emerald-800' => Auth::user()->isAccountActive(), 'bg-red-100 text-red-800' => ! Auth::user()->isAccountActive()])><span class="h-2 w-2 rounded-full bg-current"></span>{{ Auth::user()->isAccountActive() ? 'Active' : 'Inactive' }}</span>
+                        <p class="mt-2 break-words text-xs text-teal-50 sm:mt-3 sm:text-base">{{ $student->course?->course_code ?? 'Course not assigned' }} &ndash; {{ $department }}</p>
+                    </div>
                 </div>
-            @endforeach
-        </dl>
-    </section>
-    @unless (Auth::user()->isAccountActive())
-        <p class="mt-4 border-l-4 border-red-500 bg-red-50 px-4 py-3 text-sm text-red-700">Attendance is disabled for this
-            account. Please contact the administrator.</p>
-    @endunless
+                <div class="flex min-w-0 items-center justify-center gap-3 border-t border-white/40 pt-4 text-left sm:gap-6 sm:pt-6 xl:justify-start xl:border-l xl:border-t-0 xl:pl-8 xl:pt-0">
+                    <div class="flex aspect-square w-[100px] max-w-[40%] shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-2 text-center text-xs text-slate-600 min-[375px]:w-[120px] sm:w-[140px] sm:max-w-full"><canvas x-ref="qr" class="block !h-auto !w-full max-w-full object-contain" x-show="ready" aria-label="Student attendance QR code"></canvas><span x-show="!ready" x-text="message"></span></div>
+                    <div class="min-w-0"><p class="text-sm text-teal-50">Student ID</p><p class="mt-1 break-words text-xl font-bold">{{ $student->student_no }}</p>
+                        <button type="button" @click="download" :disabled="!ready" class="mt-2 inline-flex min-h-10 max-w-full items-center justify-center gap-1 rounded-full border border-white px-3 py-1.5 text-xs font-semibold hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white disabled:cursor-not-allowed disabled:opacity-50 sm:mt-4"><x-heroicon-o-arrow-down-tray class="h-4 w-4 shrink-0" /> Download QR</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+        @error('avatar')
+            <p role="alert" class="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{{ $message }}</p>
+        @enderror
+        <div class="grid min-w-0 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+            <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+                <div class="flex items-center gap-4 border-b border-slate-200 pb-5"><span class="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-teal-100 text-teal-800"><x-heroicon-o-academic-cap class="h-6 w-6" /></span><div><h3 class="text-lg font-bold text-slate-900">Academic Information</h3><p class="text-sm text-slate-500">Your current academic details.</p></div></div>
+                <dl class="divide-y divide-slate-200">
+                    @foreach ($details as [$label, $value, $icon])
+                        <div class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 py-4 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.5fr)] md:items-center"><x-dynamic-component :component="'heroicon-o-'.$icon" class="h-5 w-5 text-slate-500" /><dt class="text-sm text-slate-500">{{ $label }}</dt><dd class="col-start-2 mt-1 min-w-0 break-words text-sm font-semibold text-slate-900 md:col-start-auto md:mt-0">{{ $value }}</dd></div>
+                    @endforeach
+                </dl>
+            </section>
+            <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+                <div class="flex items-center gap-4 border-b border-slate-200 pb-5"><span class="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-teal-100 text-teal-800"><x-heroicon-o-envelope class="h-6 w-6" /></span><div><h3 class="text-lg font-bold text-slate-900">Contact Information</h3><p class="text-sm text-slate-500">Your registered email address.</p></div></div>
+                <dl><div class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 border-b border-slate-200 py-4 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.5fr)] md:items-center"><x-heroicon-o-envelope class="h-5 w-5 text-slate-500" /><dt class="text-sm text-slate-500">Email</dt><dd class="col-start-2 mt-1 min-w-0 break-all text-sm font-semibold text-slate-900 md:col-start-auto md:mt-0">{{ Auth::user()->email }}</dd></div></dl>
+            </section>
+        </div>
+        @unless (Auth::user()->isAccountActive())
+            <p class="border-l-4 border-red-500 bg-red-50 px-4 py-3 text-sm text-red-700">Attendance is disabled for this account. Please contact the administrator.</p>
+        @endunless
+    </div>
 </x-student-layout>

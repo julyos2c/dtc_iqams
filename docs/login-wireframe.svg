@@ -1,0 +1,31 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="920" viewBox="0 0 1440 920" role="img" aria-labelledby="title desc">
+<title id="title">IQAMS login page low-fidelity wireframe</title>
+<desc id="desc">Desktop and mobile layouts for the existing IQAMS login page, showing branding, user ID and password fields, remember me, forgot password, login, and privacy notice.</desc>
+<style>text{font-family:Arial,sans-serif;fill:#333}.label{font-size:16px}.small{font-size:13px}.heading{font-size:24px;font-weight:bold}.caption{font-size:18px;font-weight:bold}.line{stroke:#777;stroke-width:2;fill:none}.box{fill:#fff;stroke:#777;stroke-width:2}.muted{fill:#e6e6e6;stroke:#999;stroke-width:2}</style>
+<rect width="1440" height="920" fill="#fff"/>
+<text x="50" y="48" font-size="28" font-weight="bold">Login page — low-fidelity wireframe</text>
+<text x="50" y="75" class="small">IQAMS · Layout and content based on the current login page</text>
+<text x="50" y="115" class="caption">Desktop</text>
+<rect x="50" y="130" width="900" height="650" fill="#eee" stroke="#777" stroke-width="2"/>
+<line x1="50" y1="130" x2="950" y2="780" stroke="#ccc"/><line x1="950" y1="130" x2="50" y2="780" stroke="#ccc"/>
+<rect x="80" y="160" width="40" height="40" class="box"/><text x="89" y="186" class="small">Logo</text><text x="135" y="186" class="caption">IQAMS</text>
+<text x="95" y="410" class="heading">Every scan records a presence.</text><text x="95" y="440" class="heading">Every presence counts.</text><text x="95" y="477" class="label">Attendance system introduction</text>
+<rect x="540" y="195" width="350" height="500" class="box"/>
+<text x="570" y="235" class="small">WELCOME BACK</text><text x="570" y="270" class="heading">Sign in to your account</text><text x="570" y="296" class="small">Enter your credentials to access your dashboard.</text>
+<text x="570" y="340" class="label">User ID</text><rect x="570" y="350" width="290" height="43" class="box"/><text x="585" y="377" class="small" fill="#777">Student or employee ID</text>
+<text x="570" y="425" class="label">Password</text><rect x="570" y="435" width="290" height="43" class="box"/><text x="585" y="462" class="small">Enter your password</text><text x="821" y="462" class="small">Show</text>
+<rect x="570" y="502" width="15" height="15" class="box"/><text x="593" y="515" class="small">Remember me</text><text x="756" y="515" class="small" text-decoration="underline">Forgot password?</text>
+<rect x="570" y="545" width="290" height="46" class="muted"/><text x="715" y="573" text-anchor="middle" class="label">Login</text><text x="715" y="632" text-anchor="middle" class="small" text-decoration="underline">Privacy Notice (draft)</text>
+<text x="715" y="735" text-anchor="middle" class="small">DTC · Integrated QR-Code Attendance Monitoring System</text>
+<text x="1020" y="115" class="caption">Mobile</text>
+<rect x="1020" y="130" width="350" height="650" fill="#eee" stroke="#777" stroke-width="2"/>
+<rect x="1045" y="157" width="35" height="35" class="box"/><text x="1050" y="180" class="small">Logo</text><text x="1092" y="180" class="caption">IQAMS</text>
+<rect x="1045" y="218" width="300" height="470" class="box"/>
+<text x="1065" y="250" class="small">WELCOME BACK</text><text x="1065" y="280" font-size="21" font-weight="bold">Sign in to your account</text><text x="1065" y="305" class="small">Enter your credentials to access</text><text x="1065" y="323" class="small">your dashboard.</text>
+<text x="1065" y="358" class="label">User ID</text><rect x="1065" y="367" width="260" height="42" class="box"/><text x="1078" y="394" class="small">Student or employee ID</text>
+<text x="1065" y="440" class="label">Password</text><rect x="1065" y="449" width="260" height="42" class="box"/><text x="1078" y="476" class="small">Enter your password</text><text x="1284" y="476" class="small">Show</text>
+<rect x="1065" y="515" width="15" height="15" class="box"/><text x="1087" y="528" class="small">Remember me</text><text x="1218" y="528" class="small" text-decoration="underline">Forgot password?</text>
+<rect x="1065" y="555" width="260" height="44" class="muted"/><text x="1195" y="582" text-anchor="middle" class="label">Login</text><text x="1195" y="640" text-anchor="middle" class="small" text-decoration="underline">Privacy Notice (draft)</text>
+<text x="1195" y="730" text-anchor="middle" class="small">DTC · Integrated QR-Code</text><text x="1195" y="748" text-anchor="middle" class="small">Attendance Monitoring System</text>
+<text x="50" y="830" class="small">Gray crossed area represents the background image. Outlined shapes represent content and controls.</text>
+</svg>

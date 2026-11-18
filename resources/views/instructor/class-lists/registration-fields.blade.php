@@ -1,0 +1,6 @@
+@php($details = $details ?? [])
+@foreach(['student_no'=>'Student number','first_name'=>'First name','last_name'=>'Last name','middle_name'=>'Middle name (optional)','name_suffix'=>'Suffix (optional)','email'=>'Email'] as $field => $label)
+    <label class="text-sm">{{ $label }}<input name="{{ $field }}" value="{{ old($field, $details[$field] ?? '') }}" type="{{ $field === 'email' ? 'email' : 'text' }}" @required(!in_array($field, ['middle_name','name_suffix'])) maxlength="{{ $field === 'student_no' ? 50 : ($field === 'name_suffix' ? 100 : 255) }}" class="mt-1 block w-full rounded border-slate-300"></label>
+@endforeach
+<label class="text-sm">Course<select name="course_id" required class="mt-1 block w-full rounded border-slate-300"><option value="">Choose course</option>@foreach($courses as $course)<option value="{{ $course->id }}" @selected((string) old('course_id', $details['course_id'] ?? '') === (string) $course->id)>{{ $course->course_code }}</option>@endforeach</select></label>
+<label class="text-sm">Home section<select name="section_id" class="mt-1 block w-full rounded border-slate-300"><option value="">Not assigned</option>@foreach($sections as $section)<option value="{{ $section->id }}" @selected((string) old('section_id', $details['section_id'] ?? '') === (string) $section->id)>{{ $section->section_name }}</option>@endforeach</select></label>

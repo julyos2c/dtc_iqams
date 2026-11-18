@@ -19,6 +19,7 @@ class RolePermissionSeeder extends Seeder
         'operate-scanner',
         'manage-scanner-security',
         'review-leave-requests',
+        'review-enrollment-requests',
         'manage-school-events',
         'view-reports',
         'view-audit-logs',
@@ -37,6 +38,7 @@ class RolePermissionSeeder extends Seeder
             return [$name => $permission];
         });
 
+        $adminExisted = Role::where('name', 'admin')->where('guard_name', 'web')->exists();
         foreach (['admin', 'instructor', 'staff', 'student'] as $name) {
             Role::firstOrCreate(
                 ['name' => $name, 'guard_name' => 'web'],
@@ -44,7 +46,13 @@ class RolePermissionSeeder extends Seeder
             );
         }
 
-        Role::findByName('admin', 'web')->syncPermissions($permissions->values());
+        $admin = Role::findByName('admin', 'web');
+        $hadAuditPermission = $admin->hasPermissionTo('view-audit-logs');
+        $adminPermissions = $permissions->except('view-audit-logs')->values();
+        if (! $adminExisted || $hadAuditPermission) {
+            $adminPermissions->push($permissions['view-audit-logs']);
+        }
+        $admin->syncPermissions($adminPermissions);
         Role::findByName('instructor', 'web')->syncPermissions([$permissions['view-reports']]);
         Role::findByName('staff', 'web')->syncPermissions([$permissions['view-reports']]);
         Role::findByName('student', 'web')->syncPermissions([]);

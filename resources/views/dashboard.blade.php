@@ -128,49 +128,56 @@
             </div>
 
             {{-- Summary cards --}}
-            <section class="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-9">
+            <section class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
                 @php
                     $cards = [
                         ['total_scanned', 'Total scanned', 'bg-blue-50 text-blue-600', 'M7 7h10M7 12h10M7 17h6'],
-                        ['students', 'Students', 'bg-sky-50 text-sky-600', 'M12 14 3 9l9-5 9 5-9 5Zm0 0v6'],
+                        ['students', 'Students Scanned Today', 'bg-sky-50 text-sky-600', 'M12 14 3 9l9-5 9 5-9 5Zm0 0v6'],
                         [
                             'instructors',
-                            'Teaching',
+                            'Teaching Personnel',
                             'bg-violet-50 text-violet-600',
                             'M4 19.5V6a2 2 0 0 1 2-2h12v15.5M6 16h12',
                         ],
                         [
                             'staff',
-                            'Non-teaching',
+                            'Non-teaching Personnel',
                             'bg-amber-50 text-amber-600',
                             'M9 6h6m-8 4h10M5 20h14V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v14Z',
                         ],
-                        ['present', 'Currently present', 'bg-emerald-50 text-emerald-600', 'm5 12 4 4L19 6'],
-                        ['absent', 'Absent users', 'bg-rose-50 text-rose-600', 'M6 6l12 12M18 6 6 18'],
+                        ['absent', 'Absence', 'bg-rose-50 text-rose-600', 'M6 6l12 12M18 6 6 18'],
                         [
                             'late',
                             'Late users',
                             'bg-yellow-50 text-yellow-600',
                             'M12 7v5l3 2m6-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
                         ],
-                        [
-                            'missing_timeout',
-                            'Missing time-out',
-                            'bg-orange-50 text-orange-600',
-                            'M12 8v5m0 3h.01M10.3 3.7 2 18h20L13.7 3.7a2 2 0 0 0-3.4 0Z',
-                        ],
-                        ['incomplete', 'Incomplete', 'bg-red-50 text-red-600', 'M6 18 18 6M6 6l12 12'],
                     ];
                 @endphp
                 @foreach ($cards as [$key, $label, $colorClasses, $path])
                     <article
                         class="flex min-h-[118px] flex-col rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:p-3.5">
                         <div class="mb-2 flex items-start justify-between">
-                            <span class="flex h-9 w-9 items-center justify-center rounded-xl {{ $colorClasses }}"><svg class="h-5 w-5" fill="none"
+                            <span class="flex h-9 w-9 items-center justify-center rounded-xl {{ $colorClasses }}">
+                                @if ($key === 'total_scanned')
+                                    <svg class="h-6 w-6 text-emerald-600" viewBox="0 0 560 120" preserveAspectRatio="none" role="img" aria-label="Hourly scan activity based on scan records.">
+                                        <polygon :points="`0,120 ${points(data.charts.hourly)} 560,120`" fill="currentColor" fill-opacity=".2" />
+                                        <polyline :points="points(data.charts.hourly)" fill="none" stroke="currentColor" stroke-width="12" />
+                                    </svg>
+                                @elseif ($key === 'late')
+                                    <svg class="h-6 w-6 text-amber-600" viewBox="0 0 96 40" role="img" aria-label="Hourly late attendance records.">
+                                        <template x-for="(item, index) in (data.charts.late_hourly || [])" :key="index">
+                                            <rect :x="index * 4" :y="40 - item.value / max(data.charts.late_hourly) * 40" width="3" :height="item.value / max(data.charts.late_hourly) * 40" fill="currentColor" />
+                                        </template>
+                                    </svg>
+                                @else
+                                    <svg class="h-5 w-5" fill="none"
                                     stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="{{ $path }}" />
-                                </svg></span>
+                                    </svg>
+                                @endif
+                            </span>
                             @if ($key === 'total_scanned')
                                 <span
                                     class="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">TODAY</span>

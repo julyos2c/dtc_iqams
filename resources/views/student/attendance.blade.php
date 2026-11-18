@@ -4,6 +4,7 @@
         <div class="mb-5">
             <h2 class="text-lg font-semibold text-slate-900">Attendance history</h2>
             <p class="mt-1 text-sm text-slate-500">Official records are maintained by the administration.</p>
+            <a href="{{ route('student.excuses.index') }}" class="mt-3 inline-block rounded bg-teal-700 px-4 py-2 text-sm font-semibold text-white">Request excuse / View requests</a>
             <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div class="border border-teal-100 bg-teal-50 p-3">
                     <p class="text-xs uppercase tracking-wide text-teal-700">Attendance rate</p>

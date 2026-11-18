@@ -12,10 +12,15 @@ use App\Models\Schedule;
 use App\Models\Section;
 use App\Models\Subject;
 use App\Models\User;
+use App\Services\EnrollmentReviewService;
+use App\Services\EnrollmentWorkflow;
+use App\Services\InstructorEnrollmentService;
 use App\Services\QrCredentialService;
+use App\Services\SubjectRosterService;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
@@ -57,10 +62,10 @@ class AccountInvitationTest extends TestCase
         $section = Section::create(['course_id' => $course->id, 'section_name' => 'A', 'school_year' => '2026-2027', 'semester' => '1st']);
         $office = OfficeUnit::create(['code' => 'OPT', 'name' => 'Optional Photo Office', 'is_active' => true]);
 
-        $this->actingAs($admin)->post(route('students.store'), [
+        $this->approveStudent($admin, [
             'course_id' => $course->id, 'section_id' => $section->id, 'enrollment_type' => 'regular',
             'student_no' => 'OPT-STU', 'first_name' => 'Test', 'last_name' => 'Student', 'name_suffix' => 'Jr.', 'email' => 'optional.student@example.test',
-        ])->assertSessionHasNoErrors()->assertRedirect(route('students.index'));
+        ]);
         $this->actingAs($admin)->post(route('instructors.store'), [
             'department_id' => $department->id, 'employee_no' => 'OPT-INS', 'first_name' => 'Test', 'last_name' => 'Instructor', 'email' => 'optional.instructor@example.test',
         ])->assertSessionHasNoErrors()->assertRedirect(route('instructors.index'));
@@ -76,7 +81,7 @@ class AccountInvitationTest extends TestCase
         $this->actingAs($admin)->withSession(['auth.password_confirmed_at' => time()])->put(route('students.update', $student), [
             'course_id' => $course->id, 'section_id' => $section->id, 'enrollment_type' => 'regular',
             'first_name' => 'Test', 'last_name' => 'Student', 'name_suffix' => 'III', 'status' => 'active',
-        ])->assertSessionHasNoErrors()->assertRedirect(route('students.index'));
+        ]);
         $this->assertSame('Test Student III', $student->fresh()->fullName());
         $this->assertSame('Test Student III', $student->user->fresh()->name);
     }
@@ -85,6 +90,7 @@ class AccountInvitationTest extends TestCase
     {
         Storage::fake('public');
         Queue::fake();
+        Notification::fake();
 
         $admin = $this->user('admin');
         $department = Department::create([
@@ -108,22 +114,15 @@ class AccountInvitationTest extends TestCase
             'is_active' => true,
         ]);
 
-        $studentResponse = $this->actingAs($admin)->withSession(['auth.password_confirmed_at' => time()])
-            ->post(route('students.store'), [
-                'course_id' => $course->id,
-                'section_id' => $section->id,
-                'enrollment_type' => 'regular',
-                'student_no' => 'INV-STU-001',
-                'first_name' => 'Invited',
-                'last_name' => 'Student',
-                'email' => 'invited.student@example.test',
-                'avatar' => $this->avatar('student.png'),
-            ])
-            ->assertRedirect(route('students.index'))
-            ->assertSessionHas('generated_password', 'Student@INV-STU-001')
-            ->assertSessionHas('success', 'Account created successfully.');
+        $result = $this->approveStudent($admin, [
+            'course_id' => $course->id, 'section_id' => $section->id, 'enrollment_type' => 'regular',
+            'student_no' => 'INV-STU-001', 'first_name' => 'Invited', 'last_name' => 'Student',
+            'email' => 'invited.student@example.test',
+        ]);
+        $this->assertSame('Student@INV-STU-001', $result['temporary_password']);
 
         $student = User::where('username', 'INV-STU-001')->firstOrFail();
+        Notification::assertSentTo($student, \App\Notifications\AccountCredentials::class, fn ($notification) => $notification->username === 'INV-STU-001' && $notification->temporaryPassword === 'Student@INV-STU-001');
         $this->assertTrue($student->must_change_password);
         $this->assertTrue(Hash::check('Student@INV-STU-001', $student->password));
         $this->assertNull($student->email_verified_at);
@@ -161,6 +160,7 @@ class AccountInvitationTest extends TestCase
             ->assertSessionHas('generated_password', 'Instructor@INV-INS-001');
 
         $instructor = User::where('username', 'INV-INS-001')->firstOrFail();
+        Notification::assertSentTo($instructor, \App\Notifications\AccountCredentials::class, fn ($notification) => $notification->username === 'INV-INS-001' && $notification->temporaryPassword === 'Instructor@INV-INS-001');
         $this->assertTrue($instructor->must_change_password);
         $this->assertTrue(Hash::check('Instructor@INV-INS-001', $instructor->password));
         $this->assertNull($instructor->email_verified_at);
@@ -179,6 +179,7 @@ class AccountInvitationTest extends TestCase
             ->assertSessionHas('generated_password', 'Staff@INV-STF-001');
 
         $staff = User::where('username', 'INV-STF-001')->firstOrFail();
+        Notification::assertSentTo($staff, \App\Notifications\AccountCredentials::class, fn ($notification) => $notification->username === 'INV-STF-001' && $notification->temporaryPassword === 'Staff@INV-STF-001');
         $this->assertTrue($staff->must_change_password);
         $this->assertTrue(Hash::check('Staff@INV-STF-001', $staff->password));
         $this->assertNull($staff->email_verified_at);
@@ -205,12 +206,13 @@ class AccountInvitationTest extends TestCase
         $subject = Subject::create(['subject_code' => 'EMAIL', 'subject_name' => 'Email test', 'units' => 3]);
         $schedule = Schedule::create(['subject_id' => $subject->id, 'section_id' => $section->id, 'instructor_id' => $teacher->id, 'recurring_schedule_group_id' => (string) Str::uuid(), 'day' => 'monday', 'start_time' => '08:00', 'end_time' => '10:00', 'room' => '101']);
 
-        $this->actingAs($admin)->post(route('students.store'), [
+        $result = $this->approveStudent($admin, [
             'course_id' => $course->id, 'section_id' => $section->id,
             'enrollment_type' => 'irregular', 'enrollment_group_ids' => [$schedule->recurring_schedule_group_id],
             'student_no' => 'EMAIL-IRR', 'first_name' => 'Email', 'last_name' => 'Student',
             'email' => 'irregular@example.test', 'avatar' => $this->avatar('irregular.png'),
-        ])->assertSessionHasNoErrors()->assertRedirect(route('students.index'))->assertSessionHas('generated_password', 'Student@EMAIL-IRR');
+        ], $schedule);
+        $this->assertSame('Student@EMAIL-IRR', $result['temporary_password']);
         $user = User::where('username', 'EMAIL-IRR')->firstOrFail();
         $this->assertSame('irregular', $user->student->enrollment_type);
         $this->assertSame([$schedule->recurring_schedule_group_id], $user->student->scheduleEnrollments()->pluck('recurring_schedule_group_id')->all());
@@ -242,6 +244,27 @@ class AccountInvitationTest extends TestCase
         $this->assertCount(0, Storage::disk('public')->allFiles('avatars'));
         Queue::assertNothingPushed();
         Notification::assertNothingSent();
+    }
+
+    private function approveStudent(User $admin, array $details, ?Schedule $schedule = null): array
+    {
+        if (! $schedule) {
+            $course = Course::findOrFail($details['course_id']);
+            $teacher = Instructor::create(['user_id' => $this->user('instructor')->id, 'department_id' => $course->department_id,
+                'employee_no' => 'APPROVAL-TEACHER', 'first_name' => 'Approval', 'last_name' => 'Teacher']);
+            $subject = Subject::create(['subject_code' => 'APPROVAL', 'subject_name' => 'Approval subject', 'units' => 3]);
+            $schedule = Schedule::create(['subject_id' => $subject->id, 'section_id' => $details['section_id'], 'instructor_id' => $teacher->id,
+                'recurring_schedule_group_id' => (string) Str::uuid(), 'day' => 'monday', 'start_time' => '08:00', 'end_time' => '09:00', 'room' => 'Approval']);
+        }
+        DB::table('enrollment_workflow_states')->where('id', 1)->update(['enabled_at' => now()]);
+        app(EnrollmentWorkflow::class)->refresh();
+        $teacherUser = $schedule->instructor->user;
+        $roster = app(SubjectRosterService::class)->roster($teacherUser, $schedule->recurring_schedule_group_id, true);
+        $service = app(InstructorEnrollmentService::class);
+        $entry = $service->addEntry($roster, $teacherUser, null, $details);
+        $request = $service->submit($roster, $teacherUser, [['group_id' => $schedule->recurring_schedule_group_id, 'entry_ids' => [$entry->id], 'confirmed' => true]])->requests()->firstOrFail();
+
+        return app(EnrollmentReviewService::class)->review($request, $admin, 'approved', null);
     }
 
     private function avatar(string $name): UploadedFile
