@@ -14,6 +14,7 @@ class LeaveNotificationController extends Controller
             LeaveRequestNotification::class,
             \App\Notifications\ClassCancellationNotification::class,
             \App\Notifications\StudentExcuseNotification::class,
+            \App\Notifications\EnrollmentApprovedNotification::class,
         ])->delete();
 
         return back();
@@ -30,6 +31,7 @@ class LeaveNotificationController extends Controller
             },
             \App\Notifications\ClassCancellationNotification::class => $request->user()->isAdmin() ? 'admin.class-cancellations.index' : 'instructor.schedule',
             \App\Notifications\StudentExcuseNotification::class => $request->user()->isStudent() ? 'student.excuses.index' : 'instructor.excuses.index',
+            \App\Notifications\EnrollmentApprovedNotification::class => 'instructor.schedule',
             default => abort(404),
         };
         $item->markAsRead();

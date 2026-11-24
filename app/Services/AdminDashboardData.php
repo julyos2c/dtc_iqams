@@ -326,6 +326,7 @@ class AdminDashboardData
             ? collect()
             : collect(['instructor', 'staff'])
                 ->filter(fn (string $role): bool => $this->personnelCutoffPassed($role, $at))
+                ->reject(fn (string $role): bool => ScannerCoverage::held('personnel',$role.'/morning_in',$date))
                 ->values();
 
         $personnelAbsent = 0;

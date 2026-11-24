@@ -49,7 +49,8 @@ class StudentAbsenceReport
     public function subjectTotals(array $filters): Builder
     {
         return $this->records($filters)->selectRaw('st.id as student_id, su.id as subject_id, COUNT(DISTINCT a.id) as absence_count')
-            ->groupBy('st.id', 'su.id');
+            ->groupBy('st.id', 'su.id')
+            ->havingRaw('COUNT(DISTINCT a.id) >= ?', [StudentAbsenceWarningService::THRESHOLD]);
     }
 
     public function totals(array $filters): Builder
@@ -70,18 +71,23 @@ class StudentAbsenceReport
 
     public function students(array $filters): Builder
     {
-        return DB::query()->fromSub($this->totals($filters), 'totals')
+        return DB::query()->fromSub($this->subjectTotals($filters), 'totals')
             ->join('students as st', 'st.id', '=', 'totals.student_id')
+            ->join('subjects as su', 'su.id', '=', 'totals.subject_id')
             ->join('users as u', 'u.id', '=', 'st.user_id')
             ->leftJoin('courses as c', 'c.id', '=', 'st.course_id')
             ->leftJoin('sections as sec', 'sec.id', '=', 'st.section_id')
-            ->select('st.id', 'st.student_no', 'st.first_name', 'st.middle_name', 'st.last_name', 'st.name_suffix', 'u.avatar_path', 'c.course_code', 'sec.section_name', 'totals.total_absences', 'totals.max_subject_absences')
-            ->orderBy('st.last_name')->orderBy('st.first_name')->orderBy('st.id');
+            ->select('st.id', 'st.student_no', 'st.first_name', 'st.middle_name', 'st.last_name', 'st.name_suffix', 'u.avatar_path', 'c.course_code', 'sec.section_name', 'su.id as subject_id', 'su.subject_code', 'su.subject_name', 'totals.absence_count as total_absences', 'totals.absence_count as max_subject_absences')
+            ->when(($filters['risk'] ?? '') === 'normal', fn ($q) => $q->whereRaw('1 = 0'))
+            ->orderBy('st.last_name')->orderBy('st.first_name')->orderBy('st.id')->orderBy('su.subject_code');
     }
 
     public function details(array $filters, ?int $studentId = null): Builder
     {
-        $query = $this->records($filters)->whereIn('st.id', DB::query()->fromSub($this->totals($filters), 'eligible')->select('student_id'));
+        $query = $this->records($filters)->joinSub($this->subjectTotals($filters), 'eligible', function ($join) {
+            $join->on('eligible.student_id', '=', 'st.id')->on('eligible.subject_id', '=', 'su.id');
+        });
+        if (($filters['risk'] ?? '') === 'normal') $query->whereRaw('1 = 0');
         if ($studentId !== null) $query->where('st.id', $studentId);
         return $query->select('st.id as student_id', 'st.student_no', 'st.first_name', 'st.middle_name', 'st.last_name', 'st.name_suffix', 'c.course_code', 'sec.section_name', 'sec.school_year', 'su.id as subject_id', 'su.subject_code', 'su.subject_name', 'i.first_name as instructor_first', 'i.last_name as instructor_last', 'a.attendance_date', 'sc.start_time', 'sc.end_time')
             ->orderBy('st.last_name')->orderBy('st.first_name')->orderBy('su.subject_code')->orderBy('a.attendance_date');

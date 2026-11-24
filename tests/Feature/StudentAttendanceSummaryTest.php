@@ -54,15 +54,15 @@ class StudentAttendanceSummaryTest extends TestCase
     public function test_admin_can_view_student_absence_totals(): void
     {
         [$student, $schedule] = $this->fixture();
-        $this->log($student->user, $schedule, Carbon::parse('2026-08-03 09:00', 'Asia/Manila'), 'absent');
-        $voided = $this->log($student->user, $schedule, Carbon::parse('2026-08-10 09:00', 'Asia/Manila'), 'absent');
+        foreach (range(0, 4) as $week) $this->log($student->user, $schedule, Carbon::parse('2026-08-03 09:00', 'Asia/Manila')->addWeeks($week), 'absent');
+        $voided = $this->log($student->user, $schedule, Carbon::parse('2026-09-07 09:00', 'Asia/Manila'), 'absent');
         $voided->update(['record_state' => 'voided']);
         $admin = User::factory()->create(['role_id' => Role::findByName('admin', 'web')->id]);
 
         $this->actingAs($admin)->get(route('admin.reports.student-absences.index'))
             ->assertOk()->assertSee('Student Absences')->assertSee('SUM-STU')
-            ->assertViewHas('summary', fn ($summary) => (int) $summary->absences === 1 && (int) $summary->affected === 1);
-        $this->get(route('admin.reports.student-absences.details', $student))->assertOk()->assertJsonCount(1, 'records');
+            ->assertViewHas('summary', fn ($summary) => (int) $summary->absences === 5 && (int) $summary->affected === 1);
+        $this->get(route('admin.reports.student-absences.details', $student))->assertOk()->assertJsonCount(5, 'records');
         $this->get(route('admin.reports.student-absences.index', ['search' => 'missing']))->assertOk()->assertDontSee('SUM-STU');
         $this->get(route('admin.reports.student-absences.export', ['type' => 'detailed']))->assertOk()->assertHeader('content-type', 'application/pdf');
         $this->assertDatabaseHas('audit_logs', ['action' => 'report.student_absences_exported', 'actor_id' => $admin->id]);
@@ -79,11 +79,17 @@ class StudentAttendanceSummaryTest extends TestCase
         foreach (range(0, 1) as $week) $this->log($student->user, $otherSchedule, Carbon::parse('2026-08-04 09:00', 'Asia/Manila')->addWeeks($week), 'absent');
         $admin = User::factory()->create(['role_id' => Role::findByName('admin', 'web')->id]);
         $this->actingAs($admin)->get(route('admin.reports.student-absences.index'))
-            ->assertOk()->assertViewHas('summary', fn ($s) => (int) $s->absences === 5 && (int) $s->at_risk === 0);
+            ->assertOk()->assertDontSee('SUM-STU')->assertViewHas('summary', fn ($s) => (int) $s->absences === 0 && (int) $s->at_risk === 0);
         $this->get(route('admin.reports.student-absences.index', ['subject' => $otherSubject->id, 'from' => '2026-08-10']))
-            ->assertOk()->assertViewHas('summary', fn ($s) => (int) $s->absences === 1);
+            ->assertOk()->assertViewHas('summary', fn ($s) => (int) $s->absences === 0);
         $this->get(route('admin.reports.student-absences.index', ['risk' => 'at-risk']))
             ->assertOk()->assertViewHas('summary', fn ($s) => (int) $s->affected === 0);
+        foreach (range(3, 4) as $week) $this->log($student->user, $schedule, Carbon::parse('2026-08-03 09:00', 'Asia/Manila')->addWeeks($week), 'absent');
+        $this->get(route('admin.reports.student-absences.index'))
+            ->assertOk()->assertSee('SUM-STU')->assertSee('Summary Subject')->assertDontSee('Other Subject</td>', false)
+            ->assertViewHas('summary', fn ($s) => (int) $s->absences === 5 && (int) $s->affected === 1);
+        $this->get(route('admin.reports.student-absences.details', $student))->assertOk()->assertJsonCount(5, 'records');
+        $this->get(route('admin.reports.student-absences.details', [$student, 'subject' => $otherSubject->id]))->assertNotFound();
     }
 
     public function test_present_and_late_are_attended_while_absent_is_rated_and_excused_is_excluded(): void

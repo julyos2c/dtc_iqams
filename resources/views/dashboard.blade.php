@@ -165,11 +165,11 @@
                                         <polyline :points="points(data.charts.hourly)" fill="none" stroke="currentColor" stroke-width="12" />
                                     </svg>
                                 @elseif ($key === 'late')
-                                    <svg class="h-6 w-6 text-amber-600" viewBox="0 0 96 40" role="img" aria-label="Hourly late attendance records.">
+                                    <span class="flex h-6 w-6 items-end gap-px text-amber-600" role="img" aria-label="Hourly late attendance records.">
                                         <template x-for="(item, index) in (data.charts.late_hourly || [])" :key="index">
-                                            <rect :x="index * 4" :y="40 - item.value / max(data.charts.late_hourly) * 40" width="3" :height="item.value / max(data.charts.late_hourly) * 40" fill="currentColor" />
+                                            <span class="flex-1 bg-current" :style="`height: ${item.value / max(data.charts.late_hourly) * 100}%`"></span>
                                         </template>
-                                    </svg>
+                                    </span>
                                 @else
                                     <svg class="h-5 w-5" fill="none"
                                     stroke="currentColor" viewBox="0 0 24 24">
@@ -314,21 +314,22 @@
                             <polyline :points="points(data.charts.hourly)" fill="none" stroke="#2563eb"
                                 stroke-width="3" vector-effect="non-scaling-stroke" stroke-linecap="round"
                                 stroke-linejoin="round" />
-                            <template x-for="(item, index) in data.charts.hourly" :key="item.label">
-                                <g @mouseenter="dailyHover = index" @mouseleave="dailyHover = null"
-                                    @focus="dailyHover = index" @blur="dailyHover = null" tabindex="0"
-                                    :aria-label="`${item.label}: ${item.value} scans`">
-                                    <rect :x="data.charts.hourly.length === 1 ? 0 : Math.max(0, index * 560 / (data.charts.hourly.length - 1) - 560 / (2 * (data.charts.hourly.length - 1)))"
-                                        y="0" :width="data.charts.hourly.length === 1 ? 560 : (index === 0 || index === data.charts.hourly.length - 1 ? 280 / (data.charts.hourly.length - 1) : 560 / (data.charts.hourly.length - 1))"
-                                        height="140" fill="transparent" />
-                                    <circle x-show="dailyHover === index" :cx="data.charts.hourly.length === 1 ? 0 : index * 560 / (data.charts.hourly.length - 1)"
-                                        :cy="120 - item.value / max(data.charts.hourly) * 105" r="4" fill="#2563eb" vector-effect="non-scaling-stroke" />
-                                </g>
-                            </template>
+                            <circle x-cloak x-show="dailyHover !== null && data.charts.hourly[dailyHover]"
+                                :cx="data.charts.hourly.length <= 1 ? 0 : dailyHover * 560 / (data.charts.hourly.length - 1)"
+                                :cy="120 - (data.charts.hourly[dailyHover]?.value || 0) / max(data.charts.hourly) * 105"
+                                r="4" fill="#2563eb" vector-effect="non-scaling-stroke" />
                         </svg>
+                        <div class="absolute inset-0 flex">
+                            <template x-for="(item, index) in data.charts.hourly" :key="index">
+                                <button type="button" class="h-full flex-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
+                                    @mouseenter="dailyHover = index" @mouseleave="dailyHover = null"
+                                    @focus="dailyHover = index" @blur="dailyHover = null"
+                                    :aria-label="`${item.label}: ${item.value} scans`"></button>
+                            </template>
+                        </div>
                         <div x-cloak x-show="dailyHover !== null" class="pointer-events-none absolute top-0 -translate-x-1/2 rounded-lg bg-slate-800 px-2 py-1 text-xs font-medium text-white shadow"
                             :style="`left: ${data.charts.hourly.length <= 1 ? 0 : Math.max(8, Math.min(92, dailyHover * 100 / (data.charts.hourly.length - 1)))}%`"
-                            x-text="dailyHover === null ? '' : `${data.charts.hourly[dailyHover].label}: ${data.charts.hourly[dailyHover].value} scans`"></div>
+                            x-text="data.charts.hourly[dailyHover] ? `${data.charts.hourly[dailyHover].label}: ${data.charts.hourly[dailyHover].value} scans` : ''"></div>
                     </div>
                     <div class="flex justify-between text-[10px] text-slate-400"><template
                             x-for="(item, i) in data.charts.hourly"><span x-show="i % 2 === 0"
@@ -338,7 +339,7 @@
                     <h3 class="text-sm font-semibold text-slate-900">Weekly Attendance Trend</h3>
                     <p class="text-xs text-slate-500">Scan activity for the current week</p>
                     <div class="relative mt-5 h-40 w-full">
-                        <svg class="h-full w-full overflow-visible" viewBox="0 0 560 140" preserveAspectRatio="none" aria-hidden="true">
+                        <svg class="h-full w-full overflow-visible" viewBox="0 0 560 140" preserveAspectRatio="none">
                             <defs>
                                 <linearGradient id="weeklyTrendFill" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0" stop-color="#3b82f6" stop-opacity=".28" />
@@ -349,21 +350,22 @@
                             <polygon :points="`0,120 ${points(data.charts.weekly)} 560,120`" fill="url(#weeklyTrendFill)" />
                             <polyline :points="points(data.charts.weekly)" fill="none" stroke="#2563eb"
                                 stroke-width="3" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" />
-                            <template x-for="(item, index) in data.charts.weekly" :key="item.label">
-                                <g @mouseenter="weeklyHover = index" @mouseleave="weeklyHover = null"
-                                    @focus="weeklyHover = index" @blur="weeklyHover = null" tabindex="0"
-                                    :aria-label="`${item.label}: ${item.value} scans`">
-                                    <rect :x="data.charts.weekly.length === 1 ? 0 : Math.max(0, index * 560 / (data.charts.weekly.length - 1) - 560 / (2 * (data.charts.weekly.length - 1)))"
-                                        y="0" :width="data.charts.weekly.length === 1 ? 560 : (index === 0 || index === data.charts.weekly.length - 1 ? 280 / (data.charts.weekly.length - 1) : 560 / (data.charts.weekly.length - 1))"
-                                        height="140" fill="transparent" />
-                                    <circle x-show="weeklyHover === index" :cx="data.charts.weekly.length === 1 ? 0 : index * 560 / (data.charts.weekly.length - 1)"
-                                        :cy="120 - item.value / max(data.charts.weekly) * 105" r="4" fill="#2563eb" vector-effect="non-scaling-stroke" />
-                                </g>
-                            </template>
+                            <circle x-cloak x-show="weeklyHover !== null && data.charts.weekly[weeklyHover]"
+                                :cx="data.charts.weekly.length <= 1 ? 0 : weeklyHover * 560 / (data.charts.weekly.length - 1)"
+                                :cy="120 - (data.charts.weekly[weeklyHover]?.value || 0) / max(data.charts.weekly) * 105"
+                                r="4" fill="#2563eb" vector-effect="non-scaling-stroke" />
                         </svg>
+                        <div class="absolute inset-0 flex">
+                            <template x-for="(item, index) in data.charts.weekly" :key="index">
+                                <button type="button" class="h-full flex-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
+                                    @mouseenter="weeklyHover = index" @mouseleave="weeklyHover = null"
+                                    @focus="weeklyHover = index" @blur="weeklyHover = null"
+                                    :aria-label="`${item.label}: ${item.value} scans`"></button>
+                            </template>
+                        </div>
                         <div x-cloak x-show="weeklyHover !== null" class="pointer-events-none absolute top-0 -translate-x-1/2 rounded-lg bg-slate-800 px-2 py-1 text-xs font-medium text-white shadow"
                             :style="`left: ${data.charts.weekly.length <= 1 ? 0 : Math.max(8, Math.min(92, weeklyHover * 100 / (data.charts.weekly.length - 1)))}%`"
-                            x-text="weeklyHover === null ? '' : `${data.charts.weekly[weeklyHover].label}: ${data.charts.weekly[weeklyHover].value} scans`"></div>
+                            x-text="data.charts.weekly[weeklyHover] ? `${data.charts.weekly[weeklyHover].label}: ${data.charts.weekly[weeklyHover].value} scans` : ''"></div>
                     </div>
                     <div class="flex justify-between gap-2 text-center text-[11px] text-slate-500">
                         <template x-for="item in data.charts.weekly" :key="item.label">

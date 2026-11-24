@@ -98,6 +98,17 @@ class InstructorAttendanceController extends Controller
         return view('instructor.schedule', compact('instructor', 'scheduleGroups', 'cancellations', 'leaveClasses'));
     }
 
+    public function classAttendancePage(Request $request, Schedule $schedule)
+    {
+        $instructor = $request->user()->instructor;
+        abort_unless($instructor && $schedule->instructor_id === $instructor->id, 403);
+        $group = $this->schedule($request)->getData()['scheduleGroups']
+            ->first(fn ($group) => collect($group['days'])->contains('schedule_id', $schedule->id));
+        abort_unless($group, 404);
+
+        return view('instructor.class-attendance', compact('group'));
+    }
+
     public function classAttendance(
         Request $request,
         Schedule $schedule,
@@ -221,13 +232,16 @@ class InstructorAttendanceController extends Controller
             ->select(['id', 'user_id', 'student_no', 'first_name', 'last_name', 'middle_name', 'section_id', 'status'])
             ->orderBy('last_name')->orderBy('first_name')->get();
 
-        $logs = AttendanceLog::canonical()->where('schedule_id', $schedule->id)
+        $logs = AttendanceLog::canonical()->where('schedule_id', $schedule->id);
+        \App\Services\ScannerCoverage::filterStored($logs, 'attendance_logs');
+        $logs = $logs
             ->whereBetween('scan_time', [$occurrence->opensAt, $occurrence->endsAt])
             ->where('attendance_type', 'time_in')
             ->whereIn('user_id', $students->pluck('user_id'))
             ->select(['id', 'user_id', 'scan_time', 'status'])
             ->orderBy('scan_time')->get()->keyBy('user_id');
-        $cutoffPassed = now(config('app.timezone'))->greaterThan($occurrence->presentUntil);
+        $cutoffPassed = now(config('app.timezone'))->greaterThan($occurrence->presentUntil)
+            && !\App\Services\ScannerCoverage::held('class', (string) $schedule->id, $date);
         $cancellationStatus = app(\App\Services\ClassCancellationService::class)->status($occurrence);
 
         $rows = $students->map(function (Student $student) use ($logs, $cutoffPassed, $cancellationStatus) {

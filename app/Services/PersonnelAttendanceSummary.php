@@ -98,10 +98,15 @@ class PersonnelAttendanceSummary
 
         $days = collect();
         $calendar = $this->calendar->context($user, $from, $to);
+        $heldDates = OperationalAttendance::enabled() ? \Illuminate\Support\Facades\DB::table('scanner_absence_obligations')
+            ->where('kind','personnel')->where('target','like',$user->primaryRoleName().'/%')
+            ->whereBetween('session_date',[$from->toDateString(),$to->toDateString()])
+            ->whereIn('state',['provisional','covered','escalated'])->pluck('session_date')->flip() : collect();
         for ($date = $from->copy()->startOfDay(); $date->lte($to); $date->addDay()) {
             $dateLogs = $logs->get($date->toDateString(), collect());
             $leave = $leavesByDate->get($date->toDateString());
             $exclusionReason = $this->calendar->exclusionReason($date, $calendar);
+            if (!$leave && $dateLogs->isEmpty() && $heldDates->has($date->toDateString())) $exclusionReason ??= 'Pending scanner reconciliation';
 
             // Weekends are always non-working for personnel. Attendance scans
             // recorded on these dates must not turn them into rated workdays.
@@ -127,6 +132,7 @@ class PersonnelAttendanceSummary
             $todayLogs = $logs->get($dashboardToday->toDateString(), collect());
             $todayLeave = $leavesByDate->get($dashboardToday->toDateString());
             $todayExclusion = $this->calendar->exclusionReason($dashboardToday, $calendar);
+            if (!$todayLeave && $todayLogs->isEmpty() && $heldDates->has($dashboardToday->toDateString())) $todayExclusion ??= 'Pending scanner reconciliation';
             $today = $todayExclusion
                 ? $this->excludedDay($dashboardToday->copy(), $todayExclusion, $todayLeave)
                 : $this->day($dashboardToday->copy(), $todayLogs, $todayLeave);

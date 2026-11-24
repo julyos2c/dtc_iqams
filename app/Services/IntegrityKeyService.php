@@ -49,7 +49,14 @@ class IntegrityKeyService
 
     public function forAttendance(AttendanceLog $log): ?string
     {
-        return $this->attendanceKey($log->getAttributes());
+        $attributes = $log->getAttributes();
+        $original = $log->getRawOriginal();
+        if (!empty($original['schedule_id']) && !empty($original['school_event_id'])
+            && $original['integrity_key'] === $this->attendanceKey(['school_event_id'=>null] + $original)) {
+            // An event-excused class retains its own occurrence identity on later edits.
+            if (!empty($attributes['schedule_id'])) $attributes['school_event_id'] = null;
+        }
+        return $this->attendanceKey($attributes);
     }
 
     public function sectionKey(Section $section): string

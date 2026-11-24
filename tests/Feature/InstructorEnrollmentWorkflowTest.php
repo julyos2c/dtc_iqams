@@ -157,6 +157,25 @@ class InstructorEnrollmentWorkflowTest extends TestCase
         $this->assertStringNotContainsString('Student@NEW-001', DB::table('audit_logs')->pluck('metadata')->implode(' '));
     }
 
+    public function test_approval_notifies_the_submitting_instructor_once_and_can_be_opened(): void
+    {
+        $this->enable();
+        $enrollments = app(InstructorEnrollmentService::class);
+        $first = $enrollments->addEntry($this->list, $this->teacher, null, $this->details('NEW-001'));
+        $second = $enrollments->addEntry($this->list, $this->teacher, null, $this->details('NEW-002'));
+        $requests = collect([$first, $second])->map(fn ($entry) => $enrollments->submit($this->list, $this->teacher, [['group_id' => $this->meetings[0]->recurring_schedule_group_id, 'entry_ids' => [$entry->id], 'confirmed' => true]])->requests()->first());
+        $service = app(EnrollmentReviewService::class);
+        foreach ($requests as $request) $service->review($request, $this->admin, 'approved', null);
+        $service->review($requests->first(), $this->admin, 'approved', null);
+
+        $notification = $this->teacher->unreadNotifications()->where('type', \App\Notifications\EnrollmentApprovedNotification::class)->sole();
+        $this->assertSame(2, $notification->data['approved_count']);
+        $this->actingAs($this->teacher)->get(route('instructor.schedule'))
+            ->assertOk()->assertSee('2 student enrollment requests were approved.')->assertSee('ENR1');
+        $this->post(route('notifications.open', $notification->id))->assertRedirect(route('instructor.schedule'));
+        $this->assertNotNull($notification->fresh()->read_at);
+    }
+
     public function test_one_list_can_submit_independent_rosters_without_duplicate_identity(): void
     {
         $this->enable();

@@ -930,10 +930,6 @@ Alpine.data('classAttendanceBrowser', () => ({
             timeZone: 'UTC',
         }).format(new Date(`${this.today}T00:00:00Z`)).toLowerCase();
         this.selectDay(group.days.find((day) => day.name === todayName) || group.days[0]);
-        this.$nextTick(() => this.$root.querySelector('section[x-show="selectedGroup"]')?.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start',
-        }));
     },
 
     selectDay(day) {

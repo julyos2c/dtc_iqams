@@ -11,17 +11,66 @@ use App\Services\QrIdentityResolver;
 use App\Services\ScanSecurityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class AttendanceScannerController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request): View|RedirectResponse
     {
         $terminals = ScannerTerminal::where('is_active', true)->orderBy('name')->get(['id', 'name', 'location']);
         $terminal = $terminals->firstWhere('id', (int) $request->session()->get('scanner_terminal_id'));
 
+        if ($terminal && \App\Services\OperationalAttendance::enabled()) return redirect()->route('attendance-scanner.station');
+        if ($terminal && $this->previewEnabled()) {
+            return redirect()->route('attendance-scanner.preview');
+        }
+
         return view('attendance-scanner.index', compact('terminals', 'terminal'));
+    }
+
+    private function previewEnabled(): bool
+    {
+        return app()->environment('local', 'testing') && config('attendance.scanner_queue_preview');
+    }
+
+    public function preview(Request $request): BinaryFileResponse
+    {
+        abort_unless($request->routeIs('attendance-scanner.station') ? \App\Services\OperationalAttendance::enabled() : $this->previewEnabled(), 404);
+
+        return response()->file(public_path('scanner-preview/shell.html'), [
+            'Content-Type' => 'text/html; charset=UTF-8', 'Cache-Control' => 'private, no-store',
+        ]);
+    }
+
+    public function previewContext(Request $request): JsonResponse
+    {
+        $operational = $request->is('attendance-scanner/station-context');
+        abort_unless($operational ? \App\Services\OperationalAttendance::enabled() : $this->previewEnabled(), 404);
+        $terminalId = $request->attributes->get('scanner_terminal')->getKey();
+        if ($operational || config('attendance.rehearsal_sync')) {
+            return response()->json([
+                'mode' => $operational ? 'operational' : 'rehearsal', 'terminal_id' => $terminalId, 'operator_id' => $request->user()->id, 'csrf' => csrf_token(),
+                'registered_device' => \Illuminate\Support\Facades\DB::table('scanner_devices')->where('terminal_id', $terminalId)->whereNull('revoked_at')->value('fingerprint'),
+                'heartbeat_seconds' => max(1, config('attendance.heartbeat_seconds')),
+                'batch_size' => max(1, min(25, config('attendance.batch_size'))),
+            ])->header('Cache-Control', 'private, no-store');
+        }
+        $context = $request->session()->get('scanner_queue_preview');
+        if (! $context || $context['terminal_id'] !== $terminalId || $context['expires_at'] <= now()->timestamp) {
+            $context = [
+                'terminal_id' => $terminalId,
+                'offline_session_id' => (string) Str::uuid(),
+                'expires_at' => now()->addHours(8)->timestamp,
+            ];
+            $request->session()->put('scanner_queue_preview', $context);
+        }
+
+        return response()->json($context + ['mode' => 'preview', 'server_time' => now()->toISOString()])
+            ->header('Cache-Control', 'private, no-store');
     }
 
     public function selectTerminal(Request $request)

@@ -115,9 +115,29 @@ Route::middleware(['auth', 'active', 'password.changed', 'role:admin'])->group(f
     Route::get('attendance-scanner', [AttendanceScannerController::class, 'index'])->middleware('permission:operate-scanner')->name('attendance-scanner.index');
     Route::post('attendance-scanner/terminal', [AttendanceScannerController::class, 'selectTerminal'])->middleware('permission:operate-scanner')->name('attendance-scanner.terminal');
     Route::middleware(['scanner.terminal', 'permission:operate-scanner'])->group(function () {
+        Route::get('attendance-scanner/preview', [AttendanceScannerController::class, 'preview'])->name('attendance-scanner.preview');
+        Route::get('attendance-scanner/preview-context', [AttendanceScannerController::class, 'previewContext'])->name('attendance-scanner.preview-context');
+        Route::get('attendance-scanner/station', [AttendanceScannerController::class, 'preview'])->name('attendance-scanner.station');
+        Route::get('attendance-scanner/station-context', [AttendanceScannerController::class, 'previewContext']);
+        foreach (['rehearsal', 'operational'] as $transport) {
+            Route::prefix("attendance-scanner/$transport")->middleware('scanner.throttle:rehearsal')
+                ->controller(\App\Http\Controllers\ScannerRehearsalController::class)->group(function () use ($transport) {
+                    Route::post('challenge', 'challenge');
+                    Route::post('pair', 'pair')->middleware(['permission:manage-scanner-security', 'password.confirm']);
+                    Route::post('revoke', 'revoke')->middleware(['permission:manage-scanner-security', 'password.confirm']);
+                    Route::post('lease', 'lease');
+                    Route::post('heartbeat', 'heartbeat');
+                    Route::post('sync', 'sync');
+                    if ($transport === 'operational') {
+                        Route::post('checkpoint', 'checkpoint');
+                    }
+                });
+        }
         Route::post('attendance-scanner/scan', [AttendanceScannerController::class, 'scan'])->middleware('scanner.throttle:scan')->name('attendance-scanner.scan');
     });
     Route::middleware('permission:manage-scanner-security')->group(function () {
+        Route::get('scanner-security/offline-sessions/{session}', [\App\Http\Controllers\ScannerRehearsalController::class, 'review'])
+            ->whereUuid('session')->middleware('password.confirm')->name('scanner-security.offline-review');
         Route::get('scanner-security', [ScannerSecurityController::class, 'index'])->name('scanner-security.index');
         Route::get('scanner-security/users', [ScannerSecurityController::class, 'users'])->name('scanner-security.users');
         Route::post('scanner-security/terminals', [ScannerSecurityController::class, 'storeTerminal'])->name('scanner-security.terminals.store');
@@ -212,6 +232,7 @@ Route::middleware(['auth', 'active', 'password.changed', 'role:instructor'])->pr
     Route::get('schedule', [InstructorAttendanceController::class, 'schedule'])->name('schedule');
     Route::post('schedule/{schedule}/cancellation', [\App\Http\Controllers\ClassCancellationController::class, 'store'])->name('schedule.cancellation');
     Route::get('schedule/{schedule}/attendance', [InstructorAttendanceController::class, 'classAttendance'])->name('schedule.attendance');
+    Route::get('schedule/{schedule}/attendance/view', [InstructorAttendanceController::class, 'classAttendancePage'])->name('schedule.attendance.view');
     Route::get('schedule/{schedule}/attendance/download', [InstructorAttendanceController::class, 'downloadClassAttendance'])->name('schedule.attendance.download');
 });
 

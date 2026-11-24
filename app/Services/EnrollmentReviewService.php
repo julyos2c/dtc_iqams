@@ -7,6 +7,7 @@ use App\Models\Schedule;
 use App\Models\Student;
 use App\Models\StudentRegistrationIdentity;
 use App\Models\User;
+use App\Notifications\EnrollmentApprovedNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
@@ -85,6 +86,19 @@ class EnrollmentReviewService
                 $request->student_id = $student->id;
             }
             $request->fill(['status' => $decision, 'pending_key' => null, 'reviewed_by' => $actor->id, 'reviewed_at' => now(), 'review_notes' => $notes])->save();
+            if ($decision === 'approved') {
+                $notification = $instructorUser->notifications()
+                    ->where('type', EnrollmentApprovedNotification::class)
+                    ->where('data->group_id', $request->recurring_schedule_group_id)
+                    ->lockForUpdate()->first();
+                if ($notification) {
+                    $data = $notification->data;
+                    $data['approved_count']++;
+                    $notification->update(['data' => $data, 'read_at' => null]);
+                } else {
+                    $instructorUser->notify(new EnrollmentApprovedNotification($request));
+                }
+            }
             app(AuditLogger::class)->record('enrollment.'.$decision, $request, ['batch_id' => $request->batch_id], $actor);
             if ($decision === 'rejected' && $request->registration) {
                 app(AuditLogger::class)->record('registration.enrollment_rejected', $request->registration, ['enrollment_request_id' => $request->id], $actor);

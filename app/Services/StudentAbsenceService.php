@@ -46,7 +46,7 @@ class StudentAbsenceService
                 Schedule::whereKey($occurrence->schedule->id)->lockForUpdate()->firstOrFail();
                 if (app(ClassCancellationService::class)->status($occurrence)) return 0;
                 return $this->writer->forSchedule($occurrence, $event);
-            });
+            }, 3);
         }
 
         return $created;

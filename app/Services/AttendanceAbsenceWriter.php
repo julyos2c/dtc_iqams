@@ -47,6 +47,9 @@ class AttendanceAbsenceWriter
             ->select(['students.id as student_id', 'students.user_id'])
             ->orderBy('students.id');
 
+        if (!$event && ScannerCoverage::protect('class',(string)$schedule->id,$occurrence->sessionDate,$occurrence->opensAt,$occurrence->endsAt)) {
+            $query->whereIn('students.user_id',$excusedUsers->keys());
+        }
         return $this->insertEligible($query, function (int $userId) use ($schedule, $event, $absenceTime, $attendanceDate, $excusedUsers): array {
             $approvedExcuse = $excusedUsers->has($userId);
             return [
@@ -61,7 +64,8 @@ class AttendanceAbsenceWriter
                 'integrity_key' => $this->keys->attendanceKey([
                     'user_id' => $userId,
                     'schedule_id' => $schedule->id,
-                    'school_event_id' => $event?->id,
+                    // An excused class and required assembly can coexist on the same day.
+                    'school_event_id' => OperationalAttendance::enabled() ? null : $event?->id,
                     'attendance_type' => 'time_in',
                     'attendance_date' => $attendanceDate,
                 ]),
@@ -78,6 +82,8 @@ class AttendanceAbsenceWriter
 
     public function forEvent(SchoolEvent $event, Builder $students): int
     {
+        if (ScannerCoverage::protect('event',(string)$event->id,$event->starts_at,
+            $event->starts_at->copy()->subMinutes(config('attendance.early_scan_minutes')),$event->ends_at)) return 0;
         $absenceTime = $event->ends_at->copy()->addSecond();
         $attendanceDate = $this->keys->attendanceDate($absenceTime);
 
@@ -86,6 +92,7 @@ class AttendanceAbsenceWriter
             ->leftJoin('attendance_logs as existing', function (JoinClause $join) use ($event): void {
                 $join->on('existing.user_id', '=', 'students.user_id')
                     ->where('existing.school_event_id', $event->id)
+                    ->when(OperationalAttendance::enabled(), fn ($join) => $join->whereNull('existing.schedule_id'))
                     ->where('existing.attendance_type', 'time_in')
                     ->where(function ($query): void {
                         $query->where('existing.record_state', 'canonical')

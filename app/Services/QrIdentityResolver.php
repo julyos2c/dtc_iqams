@@ -11,12 +11,12 @@ use Illuminate\Validation\ValidationException;
 
 class QrIdentityResolver
 {
-    public function resolve(string $qrCode): User
+    public function resolve(string $qrCode, ?\Illuminate\Support\Carbon $at = null): User
     {
-        return $this->resolveWithMetadata($qrCode)['user'];
+        return $this->resolveWithMetadata($qrCode, false, $at)['user'];
     }
 
-    public function resolveWithMetadata(string $qrCode, bool $lock = false): array
+    public function resolveWithMetadata(string $qrCode, bool $lock = false, ?\Illuminate\Support\Carbon $at = null): array
     {
         $credential = QrCredential::with('user.roles')->where('code_hash', hash('sha256', $qrCode))->when($lock, fn ($q) => $q->lockForUpdate())->first();
 
@@ -32,7 +32,7 @@ class QrIdentityResolver
             return ['user' => $credential->user, 'credential' => $credential, 'is_legacy' => false];
         }
 
-        if (! $this->legacyAllowed()) {
+        if (! $this->legacyAllowed($at)) {
             throw ValidationException::withMessages(['qr_code' => 'This legacy QR card is no longer accepted. Request a replacement ID card.']);
         }
 
@@ -78,10 +78,10 @@ class QrIdentityResolver
         return ['user' => $user, 'credential' => null, 'is_legacy' => true];
     }
 
-    private function legacyAllowed(): bool
+    private function legacyAllowed(?\Illuminate\Support\Carbon $at): bool
     {
         $cutoff = config('attendance.legacy_qr_cutoff');
 
-        return ! $cutoff || now()->lessThanOrEqualTo($cutoff);
+        return ! $cutoff || ($at ?? now())->lessThanOrEqualTo($cutoff);
     }
 }

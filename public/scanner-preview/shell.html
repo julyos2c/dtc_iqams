@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>QR Scanner | IQAMS</title>
+    <link rel="stylesheet" href="../scanner-preview/scanner.css">
+    <script type="module" src="../scanner-preview/scanner.js"></script>
+</head>
+<body>
+    <aside aria-label="Scanner status"><span id="connection">Connecting</span> · <span id="pending">—</span> pending · <span id="sync-status">Sync disabled</span></aside>
+    <main>
+        <img src="../favicon.svg" width="96" height="96" alt="IQAMS">
+        <p class="brand">IQAMS Attendance Terminal</p>
+        <section aria-live="polite">
+            <h1 id="title">Starting scanner</h1>
+            <p id="message">Preparing local storage.</p>
+            <time id="captured"></time>
+        </section>
+        <p class="preview">Queue preview · Use TEST- cards only · No attendance is recorded</p>
+        <p id="storage" role="status"></p>
+        <p id="failure" role="alert"></p>
+        <div id="transport" hidden>
+            <button type="button" id="pair">Pair device</button>
+            <button type="button" id="sync">Retry synchronization</button>
+            <button type="button" id="revoke">Revoke device</button>
+            <a href="../confirm-password" target="_blank" rel="noopener">Confirm password</a>
+        </div>
+        <button id="retry" type="button" hidden>Retry unsaved scans</button>
+        <input id="qr" aria-label="QR scanner input" autocomplete="off" disabled>
+    </main>
+</body>
+</html>

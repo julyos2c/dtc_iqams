@@ -17,9 +17,9 @@ $state = $active
         {{ $icon ?? '' }}
 
         @if (! $collapsible)
-            <span>{{ $label }}</span>
+            <span class="inline-flex items-center gap-2">{{ $label }} {{ $badge ?? '' }}</span>
         @else
-            <span x-show="!sidebarCollapsed" x-cloak>{{ $label }}</span>
+            <span x-show="!sidebarCollapsed" x-cloak class="inline-flex items-center gap-2">{{ $label }} {{ $badge ?? '' }}</span>
         @endif
     </a>
 

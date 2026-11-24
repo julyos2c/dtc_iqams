@@ -1,6 +1,16 @@
 <?php
 
 return [
+    'operational_sync' => (bool) env('SCANNER_OPERATIONAL_SYNC', false),
+    'scanner_queue_preview' => (bool) env('SCANNER_QUEUE_PREVIEW', false),
+    'rehearsal_sync' => (bool) env('SCANNER_REHEARSAL_SYNC', false),
+    'scanner_rehearsal_rate' => (int) env('SCANNER_REHEARSAL_REQUESTS_PER_MINUTE', 240),
+    'heartbeat_seconds' => (int) env('SCANNER_HEARTBEAT_SECONDS', 30),
+    'suspect_after_seconds' => (int) env('SCANNER_SUSPECT_AFTER_SECONDS', 90),
+    'lease_hours' => (int) env('SCANNER_LEASE_HOURS', 8),
+    'batch_size' => (int) env('SCANNER_BATCH_SIZE', 25),
+    'clock_tolerance_seconds' => (int) env('SCANNER_CLOCK_TOLERANCE_SECONDS', 120),
+    'escalation_operating_days' => (int) env('SCANNER_ESCALATION_OPERATING_DAYS', 1),
     'early_scan_minutes' => (int) env('ATTENDANCE_EARLY_SCAN_MINUTES', 15),
     'present_grace_minutes' => (int) env('ATTENDANCE_PRESENT_GRACE_MINUTES', 15),
     'duplicate_cooldown_seconds' => (int) env('ATTENDANCE_DUPLICATE_COOLDOWN_SECONDS', 5),

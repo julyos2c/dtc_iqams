@@ -6,6 +6,7 @@ class ClassCancellationReportFilter
 {
     public static function exclude($query, string $alias = 'attendance_logs')
     {
+        ScannerCoverage::filterStored($query,$alias);
         return $query->whereNotExists(function ($q) use ($alias) {
             $q->selectRaw('1')->from('class_cancellation_requests as cancellation')
                 ->where('cancellation.status', 'approved')

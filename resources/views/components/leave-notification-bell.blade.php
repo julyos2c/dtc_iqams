@@ -1,6 +1,6 @@
 @if (Auth::user()->isAdmin() || Auth::user()->isStaff() || Auth::user()->isInstructor() || Auth::user()->isStudent())
     @php
-        $types = [\App\Notifications\LeaveRequestNotification::class, \App\Notifications\ClassCancellationNotification::class, \App\Notifications\StudentExcuseNotification::class];
+        $types = [\App\Notifications\LeaveRequestNotification::class, \App\Notifications\ClassCancellationNotification::class, \App\Notifications\StudentExcuseNotification::class, \App\Notifications\EnrollmentApprovedNotification::class];
         $key = 'iqams.notifications.' . Auth::id();
         $data = request()->attributes->get($key);
         if ($data === null) {
@@ -38,20 +38,23 @@
                         $event = $item['event'] ?? 'updated';
                         $isLeave = $notification->type === \App\Notifications\LeaveRequestNotification::class;
                         $isCancellation = $notification->type === \App\Notifications\ClassCancellationNotification::class;
+                        $isEnrollment = $notification->type === \App\Notifications\EnrollmentApprovedNotification::class;
                         $status = $isLeave ? ($leaveStatuses[$item['leave_request_id'] ?? null] ?? ($item['status'] ?? 'pending')) : ($isCancellation ? ($cancellationStatuses[$item['class_cancellation_request_id'] ?? null] ?? ($item['status'] ?? null)) : ($item['status'] ?? null));
                         $statusClass = match ($status) { 'approved' => 'bg-emerald-100 text-emerald-700', 'rejected' => 'bg-red-100 text-red-700', 'cancelled' => 'bg-slate-100 text-slate-600', default => 'bg-amber-100 text-amber-700' };
-                        $message = $isLeave ? match ($event) {
+                        $message = $isEnrollment ? (($item['approved_count'] ?? 1) . ' student enrollment ' . (($item['approved_count'] ?? 1) === 1 ? 'request was' : 'requests were') . ' approved.') : ($isLeave ? match ($event) {
                             'submitted' => Auth::user()->isAdmin() ? ($item['requester_name'] ?? 'Someone') . ' submitted a leave request.' : 'Your leave request was submitted.',
                             'approved' => 'Your leave request was approved.', 'rejected' => 'Your leave request was declined.',
                             'cancelled' => Auth::user()->isAdmin() ? ($item['requester_name'] ?? 'Someone') . ' cancelled a leave request.' : 'Your leave request was cancelled.',
                             default => 'A leave request was updated.',
-                        } : ($isCancellation ? (Auth::user()->isAdmin() ? 'A class cancellation request was submitted.' : 'Your class cancellation request was ' . ($status ?? 'updated') . '.') : ($event === 'submitted' ? 'A student submitted an excuse request.' : 'Your excuse request was ' . $event . '.'));
+                        } : ($isCancellation ? (Auth::user()->isAdmin() ? 'A class cancellation request was submitted.' : 'Your class cancellation request was ' . ($status ?? 'updated') . '.') : ($event === 'submitted' ? 'A student submitted an excuse request.' : 'Your excuse request was ' . $event . '.')));
                     @endphp
                     <form method="POST" action="{{ route('notifications.open', $notification->id) }}">
                         @csrf
                         <button type="submit" class="block w-full px-4 py-3 text-left transition hover:bg-slate-50 {{ $notification->read_at ? '' : 'bg-blue-50/60' }}">
                             <div class="flex items-start justify-between gap-3"><p class="text-sm font-medium leading-5 text-slate-800">{{ $message }}</p>@if($status)<span class="shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold capitalize {{ $statusClass }}">{{ $status }}</span>@endif</div>
-                            @if($isLeave && !empty($item['start_date']) && !empty($item['end_date']))
+                            @if($isEnrollment)
+                                <p class="mt-1 text-xs text-slate-500">{{ $item['subject'] ?? '' }}</p>
+                            @elseif($isLeave && !empty($item['start_date']) && !empty($item['end_date']))
                                 <p class="mt-1 text-xs text-slate-500">{{ $item['leave_type'] ?? 'Leave' }} · {{ \Illuminate\Support\Carbon::parse($item['start_date'])->format('M j') }}–{{ \Illuminate\Support\Carbon::parse($item['end_date'])->format('M j, Y') }}</p>
                             @elseif($isCancellation && !empty($item['occurrence_date']))
                                 <p class="mt-1 text-xs text-slate-500">{{ \Illuminate\Support\Carbon::parse($item['occurrence_date'])->format('M j, Y') }}</p>

@@ -23,6 +23,27 @@ class StaticQrSecurityTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_queue_preview_requires_the_flag_operator_and_active_terminal(): void
+    {
+        [, $admin] = $this->users();
+        $terminal = ScannerTerminal::create(['name' => 'Preview', 'location' => 'Test']);
+        $url = route('attendance-scanner.preview-context');
+        $this->getJson($url)->assertUnauthorized();
+        $this->actingAs($admin)->getJson($url)->assertForbidden();
+        $this->withSession(['scanner_terminal_id' => $terminal->id])->getJson($url)->assertNotFound();
+        $this->get(route('attendance-scanner.index'))->assertOk()->assertViewIs('attendance-scanner.index');
+        config(['attendance.scanner_queue_preview' => true]);
+        $this->get(route('attendance-scanner.index'))->assertRedirect(route('attendance-scanner.preview'));
+        $this->get(route('attendance-scanner.preview'))->assertOk();
+        $reply = $this->getJson($url)->assertOk()->assertJsonPath('mode', 'preview')
+            ->assertJsonPath('terminal_id', $terminal->id);
+        $this->getJson($url)->assertJsonPath('offline_session_id', $reply->json('offline_session_id'));
+        $this->app['env'] = 'production';
+        $this->getJson($url)->assertNotFound();
+        $this->get(route('attendance-scanner.preview'))->assertNotFound();
+        $this->assertDatabaseCount('attendance_logs', 0);
+    }
+
     public function test_random_credentials_are_hashed_at_rest_and_can_be_revoked_and_replaced(): void
     {
         [$student, $admin] = $this->users();

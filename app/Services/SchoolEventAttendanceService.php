@@ -15,12 +15,13 @@ class SchoolEventAttendanceService
         private StudentScheduleEligibility $eligibility,
     ) {}
 
-    public function markDue(?Carbon $at = null): int
+    public function markDue(?Carbon $at = null, ?int $eventId = null): int
     {
         $at = ($at ?? now())->copy()->timezone(config('app.timezone'));
         $created = 0;
 
         SchoolEvent::with('targets.schedule')
+            ->when($eventId, fn ($q) => $q->whereKey($eventId))
             ->where('status', 'published')
             ->where('attendance_mode', 'event_attendance')
             ->where('ends_at', '<', $at)
@@ -34,6 +35,7 @@ class SchoolEventAttendanceService
                     }
 
                     $created = $this->writer->forEvent($locked, $this->studentsFor($locked));
+                    if (ScannerCoverage::held('event',(string)$locked->id,$locked->starts_at)) return $created;
                     $locked->update(['attendance_finalized_at' => $at]);
 
                     return $created;

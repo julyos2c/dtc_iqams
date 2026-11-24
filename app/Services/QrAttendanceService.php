@@ -27,16 +27,16 @@ class QrAttendanceService
         private StudentScheduleEligibility $eligibility,
     ) {}
 
-    public function record(string $qrCode, ?string $location = null, ?Carbon $scannedAt = null): AttendanceLog
+    public function record(string $qrCode, ?string $location = null, ?Carbon $scannedAt = null, ?\Closure $beforeCorrection = null): AttendanceLog
     {
         $scannedAt ??= now();
         $scannedAt = $scannedAt->copy()->timezone(config('app.timezone'));
-        $user = $this->identityResolver->resolve(trim($qrCode));
+        $user = $this->identityResolver->resolve(trim($qrCode), $beforeCorrection ? $scannedAt : null);
 
-        return DB::transaction(function () use ($user, $qrCode, $location, $scannedAt) {
+        return DB::transaction(function () use ($user, $qrCode, $location, $scannedAt, $beforeCorrection) {
             $lockedUser = User::with(['roles', 'student', 'instructor', 'nonTeachingStaff'])->lockForUpdate()->findOrFail($user->id);
 
-            $resolved = $this->identityResolver->resolveWithMetadata(trim($qrCode), true);
+            $resolved = $this->identityResolver->resolveWithMetadata(trim($qrCode), true, $beforeCorrection ? $scannedAt : null);
             if ($resolved['user']->id !== $lockedUser->id) {
                 $this->deny('This QR credential no longer belongs to this account.');
             }
@@ -55,12 +55,12 @@ class QrAttendanceService
             $this->leaveGuard->ensureAttendanceIsAllowed($lockedUser, $scannedAt, 'qr_code');
 
             return $role === 'student'
-                ? $this->recordStudent($lockedUser, $scannedAt, $location)
+                ? $this->recordStudent($lockedUser, $scannedAt, $location, $beforeCorrection)
                 : $this->recordPersonnel($lockedUser, $scannedAt, $location);
         }, 3);
     }
 
-    private function recordStudent(User $user, Carbon $scannedAt, ?string $location): AttendanceLog
+    private function recordStudent(User $user, Carbon $scannedAt, ?string $location, ?\Closure $beforeCorrection): AttendanceLog
     {
         $student = $user->student;
 
@@ -85,7 +85,7 @@ class QrAttendanceService
         $eventContext = $this->eventContext($scannedAt, $candidates);
 
         if ($event = $this->eventResolver->activeAttendanceEvent($student, $scannedAt, $eventContext)) {
-            return $this->recordEvent($user, $event, $scannedAt, $location);
+            return $this->recordEvent($user, $event, $scannedAt, $location, $beforeCorrection);
         }
 
         $matches = $candidates
@@ -138,12 +138,14 @@ class QrAttendanceService
             ->first();
 
         if ($existing) {
-            if ($existing->status === 'absent' && $this->studentWindow->status($occurrence, $scannedAt) === 'late') {
+            $status = $this->studentWindow->status($occurrence, $scannedAt);
+            if ($existing->status === 'absent' && ($beforeCorrection || $status === 'late')) {
+                if ($beforeCorrection) $beforeCorrection($existing);
                 $existing->update([
                     'scan_time' => $scannedAt,
                     'scan_key' => $scanKey,
                     'record_origin' => 'scanner',
-                    'status' => 'late',
+                    'status' => $status,
                     'scanner_location' => $location,
                     'remarks' => null,
                 ]);
@@ -207,15 +209,21 @@ class QrAttendanceService
         return $this->eventResolver->context($from, $to);
     }
 
-    private function recordEvent(User $user, SchoolEvent $event, Carbon $scannedAt, ?string $location): AttendanceLog
+    private function recordEvent(User $user, SchoolEvent $event, Carbon $scannedAt, ?string $location, ?\Closure $beforeCorrection): AttendanceLog
     {
         $scanKey = "event:{$user->id}:{$event->id}";
+        if ($beforeCorrection && AttendanceLog::canonical()->where('user_id',$user->id)
+            ->where('school_event_id',$event->id)->whereNotNull('schedule_id')
+            ->where('integrity_key',hash('sha256', "event|{$user->id}|{$event->id}|time_in"))->lockForUpdate()->first()) {
+            throw new OfflineAttendanceReview('historical_event_key_conflict');
+        }
         $existing = AttendanceLog::canonical()->where('scan_key', $scanKey)->lockForUpdate()->first();
         $presentUntil = $event->starts_at->copy()->addMinutes(config('attendance.present_grace_minutes'))->endOfMinute();
         $status = $scannedAt->lessThanOrEqualTo($presentUntil) ? 'present' : 'late';
 
         if ($existing) {
             if ($existing->status === 'absent') {
+                if ($beforeCorrection) $beforeCorrection($existing);
                 $existing->update(['scan_time' => $scannedAt, 'status' => $status, 'record_origin' => 'scanner', 'scanner_location' => $location, 'remarks' => null]);
 
                 return $existing->load(['user.roles', 'schoolEvent']);

@@ -27,7 +27,9 @@ class StudentDashboardController extends Controller
             abort(403, 'No student profile linked to this account.');
         }
 
-        $myAttendance = AttendanceLog::canonical()->where('user_id', $request->user()->id)
+        $query = AttendanceLog::canonical()->where('user_id', $request->user()->id);
+        \App\Services\ScannerCoverage::filterStored($query, 'attendance_logs');
+        $myAttendance = $query
             ->select(['id', 'schedule_id', 'school_event_id', 'attendance_type', 'scan_time', 'status'])
             ->with(['schedule:id,subject_id', 'schedule.subject:id,subject_code,subject_name', 'schoolEvent:id,title'])
             ->latest('scan_time')
@@ -50,6 +52,7 @@ class StudentDashboardController extends Controller
         $student = $request->user()->student;
         abort_unless($student, 403);
         $query = AttendanceLog::canonical()->where('user_id', $request->user()->id);
+        \App\Services\ScannerCoverage::filterStored($query, 'attendance_logs');
         $logs = (clone $query)
             ->select(['id', 'schedule_id', 'school_event_id', 'attendance_type', 'scan_time', 'status'])
             ->with(['schedule:id,subject_id', 'schedule.subject:id,subject_code,subject_name', 'schoolEvent:id,title'])
